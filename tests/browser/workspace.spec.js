@@ -17,8 +17,8 @@ test("two browser workspaces run concurrently without seeing each other", async 
     ]);
     await Promise.all([startDrill(first), startDrill(second)]);
     await Promise.all([
-      expect(first.getByRole("button", { name: "用語音接通" })).toBeEnabled(),
-      expect(second.getByRole("button", { name: "用語音接通" })).toBeEnabled(),
+      expect(first.getByRole("button", { name: "接聽" })).toBeEnabled(),
+      expect(second.getByRole("button", { name: "接聽" })).toBeEnabled(),
     ]);
 
     const firstId = new URL(first.url()).hash.slice(1);

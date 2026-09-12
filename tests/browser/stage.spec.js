@@ -1,9 +1,9 @@
-import { startDrill } from "../support/browser.js";
+import { startDrill, finishDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 async function acceptThroughApi(page) {
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   const id = new URL(page.url()).hash.slice(1);
   const drill = await (await page.request.get(`/api/drills/${id}`)).json();
   const response = await page.request.post(`/api/drills/${id}/calls/accept`, {
@@ -26,7 +26,7 @@ test("live stage follows real calls, retains persona identity, and restores with
     .click();
   await startDrill(page);
   await expect(
-    page.getByRole("region", { name: "角色即時舞台" }),
+    page.getByRole("region", { name: "角色即時舞台", includeHidden: true }),
   ).toBeVisible();
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-position",
@@ -70,7 +70,7 @@ test("live stage follows real calls, retains persona identity, and restores with
   const after = await (await page.request.get(`/api/drills/${id}`)).json();
   expect(after.stage.lastEventSequence).toBe(before.stage.lastEventSequence);
   await page.getByRole("button", { name: "掛斷本通" }).click();
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   await expect(page.locator(".stage-caption")).toContainText("再次上場");
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-sprite",
@@ -78,7 +78,7 @@ test("live stage follows real calls, retains persona identity, and restores with
   );
   await acceptThroughApi(page);
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
   await expect(page).toHaveURL(/#reports\//);
   await expect(page.getByRole("button", { name: /歷史報告/ })).toHaveAttribute(
@@ -120,7 +120,7 @@ test("mobile reduced motion keeps the voice-only stage usable", async ({
     path: testInfo.outputPath("stage-mobile-typing.png"),
     fullPage: true,
   });
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
 });
 
@@ -130,7 +130,7 @@ test("SSE fallback catches up once, then reconnects without extra calls", async 
   await page.route("**/events/stream*", (route) => route.abort());
   await page.goto("/");
   await startDrill(page);
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   await expect(page.locator(".stage-caption")).toContainText("備援連線");
   const id = await page.evaluate(() => location.hash.slice(1));
   await acceptThroughApi(page);
@@ -144,7 +144,7 @@ test("SSE fallback catches up once, then reconnects without extra calls", async 
   expect(value.calls[0].messages).toHaveLength(1);
   const list = await page.locator(".stage-activity li").allTextContents();
   expect(new Set(list).size).toBe(list.length);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
 });
 
@@ -169,7 +169,7 @@ test("a legacy snapshot without stage metadata remains usable", async ({
   );
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".stage-activity li")).toHaveCount(0);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
 });
 
@@ -227,7 +227,7 @@ test("walk sprites change frames while Persona and Judge actually move, then ret
   });
   expect(leavingLayers).toMatchObject({ opacity: "1", sheetFilter: "none" });
   expect(leavingLayers.windowFilter).toContain("drop-shadow");
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   await expect(page.locator(".stage-canvas")).toHaveAttribute(
     "data-phase",
     "awaiting_call",
@@ -254,6 +254,6 @@ test("walk sprites change frames while Persona and Judge actually move, then ret
     body: JSON.stringify(samples),
     contentType: "application/json",
   });
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
 });

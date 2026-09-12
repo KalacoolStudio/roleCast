@@ -1,14 +1,16 @@
-import { startDrill } from "../support/browser.js";
+import { startDrill, finishDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 async function currentDrill(page) {
-  const id = new URL(page.url()).hash.slice(1);
+  const id = decodeURIComponent(
+    new URL(page.url()).hash.slice(1).replace(/^reports\//, ""),
+  );
   return (await page.request.get(`/api/drills/${id}`)).json();
 }
 
 async function acceptThroughApi(page) {
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   const drill = await currentDrill(page);
   const response = await page.request.post(
     `/api/drills/${drill.id}/calls/accept`,
@@ -145,14 +147,14 @@ test("early finish reports insufficient evidence and network recovery works", as
 }) => {
   await page.goto("/");
   await startDrill(page);
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   await page.route("**/api/drills/*", (route) => route.abort());
   await page.reload();
   await expect(page.getByRole("alert")).toBeVisible();
   await page.unroute("**/api/drills/*");
   await page.getByRole("button", { name: "重新取得狀態" }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(
     page.getByText("目前證據不足，部分面向尚無法評估。"),
   ).toBeVisible();
@@ -218,7 +220,7 @@ test("plot editor copies, edits three prompts, exports/imports and launches an i
     page.getByRole("heading", { name: "匯入客服演練" }),
   ).toBeVisible();
   await expect(page.getByText(/Plot v1/)).toBeVisible();
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
   await page.reload();
   await expect(

@@ -11,16 +11,6 @@
 .drill-conversation {
   min-width: 0;
 }
-.drill-conversation .incoming {
-  flex-wrap: wrap;
-  padding: 18px;
-  gap: 12px;
-}
-.drill-conversation .incoming .primary {
-  width: 100%;
-  justify-content: center;
-  margin: 0;
-}
 .drill-conversation .transcript {
   max-height: 54vh;
   min-height: 100px;

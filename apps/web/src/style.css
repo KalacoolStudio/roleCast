@@ -308,33 +308,6 @@ footer span {
   background: #f2eee8;
   color: var(--muted);
 }
-.incoming {
-  display: flex;
-  gap: 19px;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 25px;
-  background: var(--accent-soft);
-  margin-bottom: 25px;
-}
-.incoming h2 {
-  font-size: 20px;
-  margin: 3px 0;
-}
-.incoming p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-.incoming small {
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: var(--muted);
-}
-.incoming .primary {
-  margin-left: auto;
-}
 .avatar {
   background: var(--line);
   border-radius: 50%;
@@ -483,9 +456,6 @@ footer span {
 .follow-conversation {
   display: block;
   margin: 12px auto;
-}
-.incoming {
-  flex-wrap: wrap;
 }
 .call-controls {
   display: flex;
@@ -1016,15 +986,6 @@ footer span {
   }
   .state {
     font-size: 10px;
-  }
-  .incoming {
-    flex-wrap: wrap;
-    padding: 18px;
-  }
-  .incoming .primary {
-    margin-left: 0;
-    width: 100%;
-    justify-content: center;
   }
   .call-heading {
     padding: 15px;
