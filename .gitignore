@@ -8,3 +8,9 @@ coverage/
 test-results/
 playwright-report/
 .tmp/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+gha-creds-*.json

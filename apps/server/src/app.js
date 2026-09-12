@@ -8,8 +8,13 @@ import { publicPlot } from "../../../packages/core/src/plot-contracts.js";
 
 export async function createApp(
   engine,
-  { webRoot = fileURLToPath(new URL("../../web/dist/", import.meta.url)) } = {},
+  {
+    webRoot = fileURLToPath(new URL("../../web/dist/", import.meta.url)),
+    deploymentMode = "local",
+  } = {},
 ) {
+  if (!["local", "gcp"].includes(deploymentMode))
+    throw new Error("Invalid deployment mode");
   const app = Fastify({
     logger: false,
     bodyLimit: 32768,
@@ -72,6 +77,7 @@ export async function createApp(
     engine.store.db.prepare("SELECT 1").get();
     return { status: "ok" };
   });
+  app.get("/api/runtime", async () => ({ deploymentMode }));
   app.get("/api/plots", async () => engine.store.listPlots().map(publicPlot));
   app.get("/api/plots/:id", async (req) => engine.store.getPlot(req.params.id));
   app.post("/api/plots", { bodyLimit: 262144 }, async (req, reply) =>

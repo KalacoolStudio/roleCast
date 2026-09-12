@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+    outputs:
+      image_id:
+        description: Content-addressed ID of the tested Docker image
+        value: ${{ jobs.application.outputs.image_id }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  application:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      image_id: ${{ steps.image.outputs.image_id }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      - run: npm run build
+      - run: npm run test:unit
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Build and test release image
+        id: image
+        env:
+          IMAGE_TAG: rolecast-ci:${{ github.sha }}
+        run: |
+          node scripts/gcp/build-image.js "$IMAGE_TAG"
+          node scripts/gcp/container-smoke.js "$IMAGE_TAG"
+          image_id=$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG")
+          printf 'image_id=%s\n' "$image_id" >> "$GITHUB_OUTPUT"
+          docker save --output "$RUNNER_TEMP/rolecast-image.tar" "$IMAGE_TAG"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rolecast-image
+          path: ${{ runner.temp }}/rolecast-image.tar
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+
+  infrastructure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.14.9
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra/gcp
+      - run: terraform -chdir=infra/gcp init -backend=false -input=false -lockfile=readonly
+      - run: terraform -chdir=infra/gcp validate
+      - run: terraform -chdir=infra/gcp test
+      - name: Validate workflow and shell syntax
+        run: |
+          bash scripts/gcp/install-actionlint.sh "$RUNNER_TEMP/check-tools"
+          "$RUNNER_TEMP/check-tools/actionlint"
+          for script in scripts/gcp/*.sh; do bash -n "$script"; done

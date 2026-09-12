@@ -1,0 +1,20 @@
+# Replace all example identities and project settings before applying.
+project_id           = "rolecast-example"
+region               = "asia-east1"
+zone                 = "asia-east1-b"
+github_repository    = "KalacoolStudio/roleCast"
+github_repository_id = "1366870434"
+github_owner_id      = "6670851"
+application_users    = ["user:owner@example.com"]
+administrators       = ["user:owner@example.com"]
+
+# Enable only to initialize the new empty disk, then apply false after first boot.
+initialize_data_disk = true
+machine_type         = "e2-small"
+data_disk_gb         = 10
+backup_retention_days = 30
+secret_versions = {
+  LLM_API_KEY  = "1"
+  LLM_BASE_URL = "1"
+  LLM_MODEL    = "1"
+}

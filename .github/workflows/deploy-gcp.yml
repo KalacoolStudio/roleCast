@@ -1,0 +1,145 @@
+name: Deploy GCP
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    concurrency:
+      group: rolecast-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_INSTANCE: ${{ vars.GCP_INSTANCE }}
+      GCP_REPOSITORY: ${{ vars.GCP_REPOSITORY }}
+      GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Validate production configuration
+        id: config
+        run: node scripts/gcp/deploy-config.js
+      - name: Skip superseded commits
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          current_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$current_sha" == "$GITHUB_SHA" ]]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+            echo 'Skipped: this commit is no longer the current main head.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          name: rolecast-image
+          path: ${{ runner.temp }}/rolecast-image
+      - name: Load the tested image
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          EXPECTED_IMAGE_ID: ${{ needs.validate.outputs.image_id }}
+        run: |
+          [[ "$EXPECTED_IMAGE_ID" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker load --input "$RUNNER_TEMP/rolecast-image/rolecast-image.tar"
+          [[ "$(docker image inspect --format '{{.Id}}' "$EXPECTED_IMAGE_ID")" == "$EXPECTED_IMAGE_ID" ]]
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        id: auth
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_lifetime: 3600s
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+      - name: Publish the tested image
+        id: publish
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          REGISTRY: ${{ steps.config.outputs.registry }}
+          IMAGE_REPOSITORY: ${{ steps.config.outputs.image_repository }}
+          EXPECTED_IMAGE_ID: ${{ needs.validate.outputs.image_id }}
+        run: |
+          printf '%s' "$ACCESS_TOKEN" | docker login -u oauth2accesstoken --password-stdin "$REGISTRY"
+          tag="$IMAGE_REPOSITORY:$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker tag "$EXPECTED_IMAGE_ID" "$tag"
+          docker push "$tag"
+          image=$(docker image inspect --format '{{index .RepoDigests 0}}' "$tag")
+          [[ "$image" == "$IMAGE_REPOSITORY"@sha256:* ]]
+          [[ "${image##*@sha256:}" =~ ^[a-f0-9]{64}$ ]]
+          printf 'image=%s\n' "$image" >> "$GITHUB_OUTPUT"
+      - name: Refresh identity before remote deployment
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Replace and verify the VM release
+        id: release
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.publish.outputs.image }}
+        run: |
+          # Recheck after publishing because newer merges may have arrived meanwhile.
+          current_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$current_sha" != "$GITHUB_SHA" ]]; then
+            echo 'Skipped: a newer main commit arrived during publishing.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          printf 'Requested commit: `%s`\n\nRequested image: `%s`\n\n' "$GITHUB_SHA" "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          gcloud compute ssh "$GCP_INSTANCE" --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" \
+            --tunnel-through-iap --ssh-key-expire-after=10m --quiet \
+            --command "sudo /bin/bash /var/lib/rolecast/host.sh submit '$IMAGE' '$GITHUB_SHA' '$GITHUB_RUN_NUMBER'" \
+            | tee "$RUNNER_TEMP/rolecast-release-result"
+          outcome=$(sed -n 's/^ROLECAST_RESULT=//p' "$RUNNER_TEMP/rolecast-release-result" | tail -n 1)
+          [[ "$outcome" == deployed || "$outcome" == already-current || "$outcome" == skipped-stale ]]
+          {
+            printf 'Outcome: `%s`\n\n' "$outcome"
+            printf 'Private access: `gcloud compute start-iap-tunnel %s 8080 --project=%s --zone=%s --local-host-port=127.0.0.1:18080`\n' "$GCP_INSTANCE" "$GCP_PROJECT_ID" "$GCP_ZONE"
+            echo 'Open http://127.0.0.1:18080 while the tunnel is running.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Refresh identity for final status
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        if: always() && steps.release.outcome != 'skipped' && steps.publish.outcome == 'success'
+        with:
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Report release and backup state
+        if: always() && steps.release.outcome != 'skipped' && steps.publish.outcome == 'success'
+        run: |
+          gcloud compute ssh "$GCP_INSTANCE" --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" \
+            --tunnel-through-iap --quiet --command 'sudo /bin/bash /var/lib/rolecast/host.sh status' >> "$GITHUB_STEP_SUMMARY"

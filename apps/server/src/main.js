@@ -1,15 +1,18 @@
-import { loadConfig } from "./config.js";
+import { loadConfig, verifyCloudStorage } from "./config.js";
 import { createApp } from "./app.js";
 import { Store } from "../../../packages/storage/src/store.js";
 import { Agents } from "../../../packages/core/src/agents.js";
 import { Engine } from "../../../packages/core/src/engine.js";
 try {
   const config = loadConfig();
+  verifyCloudStorage(config);
   const store = new Store(config.databasePath);
   store.recover();
-  const app = await createApp(new Engine(store, new Agents(config)));
-  await app.listen({ port: config.port, host: "127.0.0.1" });
-  console.log(`Role Cast: http://127.0.0.1:${config.port}`);
+  const app = await createApp(new Engine(store, new Agents(config)), {
+    deploymentMode: config.deploymentMode,
+  });
+  await app.listen({ port: config.port, host: config.host });
+  console.log(`Role Cast listening on ${config.host}:${config.port}`);
   let stopping = false;
   const stop = async () => {
     if (stopping) return;

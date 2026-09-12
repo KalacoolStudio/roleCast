@@ -68,6 +68,7 @@ function App() {
   const [activeId, setActiveId] = useState(null);
   const [managing, setManaging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [deploymentMode, setDeploymentMode] = useState(null);
   const selected = useRef(id),
     bottom = useRef(null);
   const select = useCallback((next) => {
@@ -96,9 +97,10 @@ function App() {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api("/plots"), loadList()])
-      .then(([available, list]) => {
+    Promise.all([api("/plots"), loadList(), api("/runtime")])
+      .then(([available, list, runtime]) => {
         if (cancelled) return;
+        setDeploymentMode(runtime.deploymentMode);
         setPlots(available);
         if (!selected.current && list.activeId) select(list.activeId);
       })
@@ -202,6 +204,7 @@ function App() {
   };
   const retry = () =>
     action(async () => {
+      setDeploymentMode((await api("/runtime")).deploymentMode);
       setPlots(await api("/plots"));
       await loadList();
       if (id) await refresh(id);
@@ -274,7 +277,13 @@ function App() {
           )}
         </div>
         <div className="sidebar-foot">
-          <span className="live-dot" /> 本機工作空間<small>文字版 · 0.1</small>
+          <span className="live-dot" />
+          {deploymentMode === "gcp"
+            ? "雲端共用工作空間"
+            : deploymentMode === "local"
+              ? "本機工作空間"
+              : "正在連線…"}
+          <small>文字版 · 0.1</small>
         </div>
       </aside>
       <main>
@@ -371,12 +380,19 @@ function App() {
             </div>
             <div className="start-row">
               <p className="privacy">
-                紀錄保存在本機。演練內容會送至你設定的外部 LLM API 進行推論。
+                {deploymentMode === "gcp"
+                  ? "紀錄保存在 GCP，並與此工作空間的授權使用者共用。"
+                  : deploymentMode === "local"
+                    ? "紀錄保存在本機。"
+                    : "正在確認紀錄儲存位置。"}
+                演練內容會送至你設定的外部 LLM API 進行推論。
               </p>
               <button
                 className="primary"
                 onClick={start}
-                disabled={acting || !plots.length || !!activeId}
+                disabled={
+                  acting || !plots.length || !deploymentMode || !!activeId
+                }
               >
                 {acting ? "正在開始…" : "開始演練"} <span>↗</span>
               </button>
