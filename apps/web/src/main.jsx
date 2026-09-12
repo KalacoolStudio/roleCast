@@ -1,3 +1,5 @@
+import { DrillStage } from "./stage/DrillStage.jsx";
+import { connectDrill } from "./stage/feed.js";
 import { PlotEditor } from "./PlotEditor.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -59,6 +61,10 @@ function App() {
   const [text, setText] = useState(""),
     [error, setError] = useState(""),
     [acting, setActing] = useState(false);
+  const [stageEvents, setStageEvents] = useState([]);
+  const [stageReset, setStageReset] = useState(0);
+  const [connection, setConnection] = useState("connecting");
+  const feed = useRef(null);
   const [activeId, setActiveId] = useState(null);
   const [managing, setManaging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -83,7 +89,7 @@ function App() {
   const refresh = useCallback(async (target) => {
     const value = await api(`/drills/${target}`);
     if (selected.current === target) {
-      setDrill(value);
+      feed.current?.acceptSnapshot(value);
       setError("");
     }
     return value;
@@ -105,28 +111,35 @@ function App() {
   }, [loadList, select]);
   useEffect(() => {
     if (!id) return;
-    let cancelled = false,
-      timer;
-    const poll = async () => {
-      try {
-        const s = await refresh(id);
-        if (cancelled) return;
-        await loadList();
-        if (!finished(s.state))
-          timer = setTimeout(poll, document.hidden ? 2500 : 500);
-      } catch (e) {
-        if (!cancelled) {
-          setError(e.message || "連線中斷，正在重新連線。");
-          timer = setTimeout(poll, 2500);
-        }
-      }
-    };
-    poll();
+    const connection = connectDrill({
+      id,
+      getSnapshot: () => api(`/drills/${id}`),
+      getEvents: (after) => api(`/drills/${id}/events?after=${after}`),
+      onSnapshot: (snapshot) => {
+        if (selected.current !== id) return;
+        setDrill(snapshot);
+        setError("");
+        loadList().catch(() => {});
+      },
+      onEvent: (event) => {
+        if (selected.current === id)
+          setStageEvents((events) => [...events, event].slice(-100));
+      },
+      onReset: () => {
+        setStageEvents([]);
+        setStageReset((n) => n + 1);
+      },
+      onStatus: (status) => {
+        setConnection(status);
+        if (status === "offline") setError("連線中斷，正在重新連線。");
+      },
+    });
+    feed.current = connection;
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      connection.close();
+      if (feed.current === connection) feed.current = null;
     };
-  }, [id, refresh, loadList]);
+  }, [id, loadList]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [drill?.calls.at(-1)?.messages.length]);
@@ -414,123 +427,134 @@ function App() {
                 {drill.error.message}
               </div>
             )}
-            {drill.pendingCall && (
-              <section className="incoming">
-                <span className="avatar">
-                  {drill.pendingCall.persona.name.slice(0, 1)}
-                </span>
-                <div>
-                  <small>下一通對話</small>
-                  <h2>{drill.pendingCall.persona.name}</h2>
-                  <p>{drill.pendingCall.persona.role}</p>
-                </div>
-                <button
-                  className="primary"
-                  disabled={acting}
-                  onClick={() =>
-                    command("/calls/accept", {
-                      assignmentId: drill.pendingCall.assignmentId,
-                    })
-                  }
-                >
-                  接通對話 ↗
-                </button>
-              </section>
-            )}
-            <div className="transcript">
-              {!drill.calls.length && !drill.pendingCall && (
-                <div className="waiting">
-                  {finished(drill.state)
-                    ? "這場演練尚無對話紀錄。"
-                    : "正在為你準備第一通對話…"}
-                </div>
-              )}
-              {drill.calls.map((c) => (
-                <section className="call" key={c.id}>
-                  <div className="call-heading">
-                    <span className="avatar small">
-                      {c.persona.name.slice(0, 1)}
+            <div className="drill-workspace">
+              <DrillStage
+                key={drill.id}
+                drill={drill}
+                events={stageEvents}
+                resetKey={stageReset}
+                connection={connection}
+              />
+              <div className="drill-conversation">
+                {drill.pendingCall && (
+                  <section className="incoming">
+                    <span className="avatar">
+                      {drill.pendingCall.persona.name.slice(0, 1)}
                     </span>
                     <div>
-                      <h2>
-                        {c.persona.name} <small>第 {c.ordinal} 通</small>
-                      </h2>
-                      <p>{c.persona.role}</p>
+                      <small>下一通對話</small>
+                      <h2>{drill.pendingCall.persona.name}</h2>
+                      <p>{drill.pendingCall.persona.role}</p>
                     </div>
-                    {c.endedAt && (
-                      <span className="call-end">{ends[c.endReason]}</span>
-                    )}
-                  </div>
-                  <div className="messages">
-                    {c.messages.map((m) => (
-                      <div
-                        id={`message-${m.id}`}
-                        key={m.id}
-                        className={`message ${m.speaker}`}
-                      >
-                        <small>
-                          {m.speaker === "user" ? "你" : c.persona.name}
-                        </small>
-                        <p>{m.text}</p>
-                      </div>
-                    ))}
-                    {!c.endedAt && drill.busy && (
-                      <div className="typing" aria-label="正在處理回合">
-                        <span />
-                        <span />
-                        <span />
-                      </div>
-                    )}
-                  </div>
-                </section>
-              ))}
-              <div ref={bottom} />
-            </div>
-            {drill.state === "in_call" && (
-              <form className="composer" onSubmit={send}>
-                <label className="sr-only" htmlFor="message">
-                  你的回覆
-                </label>
-                <textarea
-                  id="message"
-                  placeholder="寫下你的回覆…"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  disabled={acting || drill.busy}
-                  maxLength={4000}
-                />
-                <button
-                  className="primary"
-                  type="submit"
-                  disabled={acting || drill.busy || !text.trim()}
-                >
-                  送出 ↑
-                </button>
-              </form>
-            )}
-            {!finished(drill.state) && (
-              <div className="call-controls">
-                {drill.state === "in_call" && (
-                  <button
-                    onClick={() => command(`/calls/${call.id}/hangup`)}
-                    disabled={acting}
-                  >
-                    掛斷本通
-                  </button>
+                    <button
+                      className="primary"
+                      disabled={acting}
+                      onClick={() =>
+                        command("/calls/accept", {
+                          assignmentId: drill.pendingCall.assignmentId,
+                        })
+                      }
+                    >
+                      接通對話 ↗
+                    </button>
+                  </section>
                 )}
-                <button
-                  disabled={
-                    acting ||
-                    drill.finishRequested ||
-                    drill.state === "reporting"
-                  }
-                  onClick={() => command("/finish")}
-                >
-                  結束整場演練
-                </button>
-                <small>結束後會整理已完成的對話與回饋。</small>
+                <div className="transcript">
+                  {!drill.calls.length && !drill.pendingCall && (
+                    <div className="waiting">
+                      {finished(drill.state)
+                        ? "這場演練尚無對話紀錄。"
+                        : "正在為你準備第一通對話…"}
+                    </div>
+                  )}
+                  {drill.calls.map((c) => (
+                    <section className="call" key={c.id}>
+                      <div className="call-heading">
+                        <span className="avatar small">
+                          {c.persona.name.slice(0, 1)}
+                        </span>
+                        <div>
+                          <h2>
+                            {c.persona.name} <small>第 {c.ordinal} 通</small>
+                          </h2>
+                          <p>{c.persona.role}</p>
+                        </div>
+                        {c.endedAt && (
+                          <span className="call-end">{ends[c.endReason]}</span>
+                        )}
+                      </div>
+                      <div className="messages">
+                        {c.messages.map((m) => (
+                          <div
+                            id={`message-${m.id}`}
+                            key={m.id}
+                            className={`message ${m.speaker}`}
+                          >
+                            <small>
+                              {m.speaker === "user" ? "你" : c.persona.name}
+                            </small>
+                            <p>{m.text}</p>
+                          </div>
+                        ))}
+                        {!c.endedAt && drill.busy && (
+                          <div className="typing" aria-label="正在處理回合">
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  ))}
+                  <div ref={bottom} />
+                </div>
+                {drill.state === "in_call" && (
+                  <form className="composer" onSubmit={send}>
+                    <label className="sr-only" htmlFor="message">
+                      你的回覆
+                    </label>
+                    <textarea
+                      id="message"
+                      placeholder="寫下你的回覆…"
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      disabled={acting || drill.busy}
+                      maxLength={4000}
+                    />
+                    <button
+                      className="primary"
+                      type="submit"
+                      disabled={acting || drill.busy || !text.trim()}
+                    >
+                      送出 ↑
+                    </button>
+                  </form>
+                )}
+                {!finished(drill.state) && (
+                  <div className="call-controls">
+                    {drill.state === "in_call" && (
+                      <button
+                        onClick={() => command(`/calls/${call.id}/hangup`)}
+                        disabled={acting}
+                      >
+                        掛斷本通
+                      </button>
+                    )}
+                    <button
+                      disabled={
+                        acting ||
+                        drill.finishRequested ||
+                        drill.state === "reporting"
+                      }
+                      onClick={() => command("/finish")}
+                    >
+                      結束整場演練
+                    </button>
+                    <small>結束後會整理已完成的對話與回饋。</small>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
             {drill.report && (
               <section className="report">
                 <div className="eyebrow">REFLECT & GROW</div>

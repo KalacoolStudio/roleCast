@@ -1,3 +1,4 @@
+import { stageMetadata, stageEvents } from "../../core/src/stage.js";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -29,7 +30,8 @@ export class Store {
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("journal_mode = WAL");
     const version = this.db.pragma("user_version", { simple: true });
-    if (version > 2) {
+    this.listeners = new Set();
+    if (version > 3) {
       this.db.close();
       throw new Error("資料庫版本較新，請使用相容的程式。");
     }
@@ -67,6 +69,61 @@ export class Store {
         }
         this.db.pragma("user_version = 2");
       })();
+
+    if (version < 3)
+      this.db.transaction(() => {
+        this.db.exec(
+          "CREATE TABLE IF NOT EXISTS drill_stage_events (session_id TEXT NOT NULL REFERENCES sessions(id), sequence INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(session_id,sequence))",
+        );
+        for (const row of this.db.prepare("SELECT id FROM sessions").all()) {
+          const drill = this.get(row.id);
+          const meta = JSON.parse(
+            this.db
+              .prepare("SELECT payload FROM sessions WHERE id=?")
+              .get(row.id).payload,
+          );
+          meta.stage = stageMetadata(drill, meta.stage);
+          this.db
+            .prepare("UPDATE sessions SET payload=? WHERE id=?")
+            .run(JSON.stringify(meta), row.id);
+        }
+        this.db.pragma("user_version = 3");
+      })();
+  }
+  subscribe(listener) {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  events(id, after = 0, limit = 100) {
+    const row = this.db
+      .prepare("SELECT payload FROM sessions WHERE id=?")
+      .get(id);
+    if (!row) throw missing();
+    if (
+      !Number.isSafeInteger(after) ||
+      after < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 500
+    )
+      throw new AppError("INVALID_CURSOR", "事件游標或筆數不正確。", 400);
+    const latestSequence =
+      JSON.parse(row.payload).stage?.lastEventSequence || 0;
+    if (after > latestSequence)
+      throw new AppError("CURSOR_AHEAD", "請重新取得最新演練狀態。", 409);
+    const events = this.db
+      .prepare(
+        "SELECT payload FROM drill_stage_events WHERE session_id=? AND sequence>? ORDER BY sequence LIMIT ?",
+      )
+      .all(id, after, limit)
+      .map((r) => JSON.parse(r.payload));
+    const nextCursor = events.at(-1)?.sequence ?? after;
+    return {
+      events,
+      nextCursor,
+      hasMore: nextCursor < latestSequence,
+      latestSequence,
+    };
   }
   seedPlots(plots) {
     this.db.transaction(() => {
@@ -147,7 +204,21 @@ export class Store {
     return s;
   }
   save(drill) {
+    let stage;
     this.db.transaction(() => {
+      const exists = this.db
+        .prepare("SELECT id FROM sessions WHERE id=?")
+        .get(drill.id);
+      const before = exists ? this.get(drill.id) : null;
+      stage = stageMetadata(drill, before?.stage);
+      stage.revision++;
+      const events = stageEvents(before, drill, stage).map((event) => ({
+        ...event,
+        drillId: drill.id,
+        sequence: ++stage.lastEventSequence,
+        revision: stage.revision,
+        occurredAt: new Date().toISOString(),
+      }));
       const {
         personas,
         assignments,
@@ -162,7 +233,11 @@ export class Store {
         .prepare(
           "INSERT INTO sessions VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,payload=excluded.payload",
         )
-        .run(drill.id, drill.state, JSON.stringify(meta));
+        .run(drill.id, drill.state, JSON.stringify({ ...meta, stage }));
+      for (const event of events)
+        this.db
+          .prepare("INSERT INTO drill_stage_events VALUES(?,?,?)")
+          .run(drill.id, event.sequence, JSON.stringify(event));
       for (const p of personas)
         this.db
           .prepare(
@@ -211,6 +286,14 @@ export class Store {
           )
           .run(drill.id, JSON.stringify(report));
     })();
+    drill.stage = stage;
+    for (const listener of this.listeners) {
+      try {
+        listener(drill.id);
+      } catch {
+        /* Transport failure cannot undo a committed drill. */
+      }
+    }
   }
   create(s) {
     if (this.active())
@@ -235,6 +318,7 @@ export class Store {
     }
   }
   close() {
+    this.listeners.clear();
     this.db.close();
   }
 }

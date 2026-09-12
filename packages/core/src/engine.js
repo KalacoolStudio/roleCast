@@ -295,6 +295,7 @@ export class Engine {
     };
     return {
       id: s.id,
+      stage: s.stage,
       state: s.state,
       createdAt: s.createdAt,
       plot: publicPlot(s.plot),

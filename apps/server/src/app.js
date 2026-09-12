@@ -1,3 +1,4 @@
+import { registerStageRoutes } from "./stage-stream.js";
 import Fastify from "fastify";
 import staticPlugin from "@fastify/static";
 import { fileURLToPath } from "node:url";
@@ -46,7 +47,8 @@ export async function createApp(
       ...(error.activeId ? { activeId: error.activeId } : {}),
     });
   });
-  // Loopback deployment: reject browser requests from other origins without enabling CORS.
+  // Allow local development and same-host HTTPS tunnels without enabling CORS.
+  // ngrok preserves Host; do not use client-supplied X-Forwarded-Host here.
   app.addHook("onRequest", async (request, reply) => {
     const origin = request.headers.origin;
     if (origin) {
@@ -55,14 +57,15 @@ export async function createApp(
         const u = new URL(origin);
         allowed =
           ["http:", "https:"].includes(u.protocol) &&
-          ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+          (["localhost", "127.0.0.1", "[::1]"].includes(u.hostname) ||
+            (u.protocol === "https:" && u.host === request.headers.host));
       } catch {
         /* malformed origin */
       }
       if (!allowed)
         return reply
           .code(403)
-          .send({ code: "FORBIDDEN", message: "僅限本機操作。" });
+          .send({ code: "FORBIDDEN", message: "不允許此請求來源。" });
     }
   });
   app.get("/api/health", async () => {
@@ -154,6 +157,7 @@ export async function createApp(
         .send({ state: s.state, report: s.report });
     });
   }
+  registerStageRoutes(app, engine);
   if (existsSync(webRoot)) {
     await app.register(staticPlugin, { root: webRoot });
     app.setNotFoundHandler((req, reply) =>

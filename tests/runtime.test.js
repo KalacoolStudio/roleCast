@@ -28,11 +28,15 @@ it("validates settings and env priority without revealing values; setup preserve
     model: "override",
     apiKey: "SENTINEL_SECRET",
     port: 3000,
+    outputMode: "auto",
   });
+  for (const mode of ["auto", "json_schema", "json_object", "text"])
+    expect(loadConfig(dir, { LLM_OUTPUT_MODE: mode }).outputMode).toBe(mode);
   for (const patch of [
     { LLM_BASE_URL: "https://user:SENTINEL_SECRET@example.test" },
     { PORT: "SENTINEL_SECRET" },
     { LLM_BASE_URL: "bad" },
+    { LLM_OUTPUT_MODE: "SENTINEL_SECRET" },
   ]) {
     try {
       loadConfig(dir, patch);
@@ -162,4 +166,73 @@ it("shutdown makes pending work unable to touch a closed database", async () => 
   h.engine.finish(id);
   await app.close();
   expect(h.engine.disposed).toBe(true);
+});
+
+it("serves tunnel assets and API commands while rejecting unrelated origins", async () => {
+  const webRoot = mkdtempSync(join(tmpdir(), "role-cast-web-"));
+  cleanup.push(() => rmSync(webRoot, { recursive: true, force: true }));
+  writeFileSync(join(webRoot, "app.js"), "console.log('ready');");
+  writeFileSync(join(webRoot, "app.css"), "body { color: black; }");
+  const h = harness();
+  const app = await createApp(h.engine, { webRoot });
+  cleanup.push(() => app.close());
+  const host = "role-cast.ngrok-free.app";
+  const headers = {
+    host,
+    origin: `https://${host}`,
+    "x-forwarded-proto": "https",
+  };
+  for (const url of ["/app.js", "/app.css", "/api/health"]) {
+    expect((await app.inject({ url, headers })).statusCode).toBe(200);
+  }
+  expect(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/drills",
+        headers,
+        payload: { plotId: "anti-fraud" },
+      })
+    ).statusCode,
+  ).toBe(202);
+  for (const origin of [
+    "https://another.ngrok-free.app",
+    `https://${host}.attacker.test`,
+    `https://${host}:444`,
+    `http://${host}`,
+    `ftp://${host}`,
+    "null",
+    "malformed",
+  ]) {
+    for (const url of ["/app.js", "/api/drills"]) {
+      const response = await app.inject({
+        method: url.startsWith("/api/") ? "POST" : "GET",
+        url,
+        headers: { ...headers, origin, "x-forwarded-host": origin },
+      });
+      expect(response.statusCode).toBe(403);
+    }
+  }
+  expect(
+    (
+      await app.inject({
+        url: "/api/health",
+        headers: {
+          host: "127.0.0.1:3000",
+          origin: `https://${host}`,
+          "x-forwarded-host": host,
+        },
+      })
+    ).statusCode,
+  ).toBe(403);
+  for (const origin of [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://[::1]:5173",
+  ]) {
+    expect(
+      (await app.inject({ url: "/api/health", headers: { origin } }))
+        .statusCode,
+    ).toBe(200);
+  }
 });

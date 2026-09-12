@@ -107,6 +107,7 @@ test("early finish reports insufficient evidence and network recovery works", as
   await page.getByRole("button", { name: /開始演練/ }).click();
   await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
   await page.route("**/api/drills/*", (route) => route.abort());
+  await page.reload();
   await expect(page.getByRole("alert")).toBeVisible();
   await page.unroute("**/api/drills/*");
   await page.getByRole("button", { name: "重新取得狀態" }).click();

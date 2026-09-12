@@ -192,7 +192,7 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
     store.close();
   });
   store.recover();
-  expect(store.db.pragma("user_version", { simple: true })).toBe(2);
+  expect(store.db.pragma("user_version", { simple: true })).toBe(3);
   expect(store.get(id).prompts).toEqual(completed.prompts);
   expect(store.get(id).messages).toEqual(completed.messages);
   expect(store.get(id).report).toEqual(completed.report);

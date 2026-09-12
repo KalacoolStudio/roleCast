@@ -28,6 +28,9 @@ export function loadConfig(directory = root, env = process.env) {
   } catch {
     invalid.push("LLM_BASE_URL");
   }
+  const outputMode = values.LLM_OUTPUT_MODE?.trim() || "auto";
+  if (!["auto", "json_schema", "json_object", "text"].includes(outputMode))
+    invalid.push("LLM_OUTPUT_MODE");
   const port = Number(values.PORT || 3000);
   if (!Number.isInteger(port) || port < 1 || port > 65535) invalid.push("PORT");
   if (invalid.length)
@@ -36,6 +39,7 @@ export function loadConfig(directory = root, env = process.env) {
     apiKey: values.LLM_API_KEY,
     baseURL: values.LLM_BASE_URL,
     model: values.LLM_MODEL,
+    outputMode,
     port,
     databasePath: resolve(
       directory,

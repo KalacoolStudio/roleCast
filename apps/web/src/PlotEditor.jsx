@@ -262,7 +262,7 @@ export function PlotEditor({ plots, api, onSaved, onUse }) {
             ].map(([role, label, help]) => (
               <label className="plot-field" key={role}>
                 <span>{label}</span>
-                <small>{help}</small>
+                <small>{help}只設定行為與評估重點，輸出欄位由系統固定。</small>
                 <textarea
                   className="prompt-input"
                   aria-label={label}
