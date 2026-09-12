@@ -6,6 +6,7 @@ export function createVoiceRelay(
   server,
   coordinator,
   frontendOrigins = ["http://127.0.0.1:5173", "http://localhost:5173"],
+  workspaceFor = () => "default",
 ) {
   const sockets = new WebSocketServer({
     noServer: true,
@@ -44,9 +45,11 @@ export function createVoiceRelay(
       /^\/api\/(?:drills|sessions)\/([a-zA-Z0-9_-]+)\/calls\/([a-zA-Z0-9_-]+)\/voice\/([a-zA-Z0-9_-]+)$/.exec(
         request.url,
       );
+    const workspaceId = workspaceFor(request);
     if (
       !match ||
       !allowed(request.headers.origin, request.headers.host) ||
+      !workspaceId ||
       coordinator.disposed
     ) {
       socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
@@ -81,6 +84,7 @@ export function createVoiceRelay(
               match[3],
               event.token,
               ws,
+              workspaceId,
             );
             clearTimeout(timer);
           } else if (binary) coordinator.audio(item, data);

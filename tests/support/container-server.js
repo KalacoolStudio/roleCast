@@ -12,6 +12,7 @@ verifyCloudStorage(config);
 const store = new Store(config.databasePath);
 store.recover();
 const app = await createApp(new Engine(store, fixtureAgents({}, 100)), {
+  testWorkspaceToken: "container-smoke-test",
   deploymentMode: config.deploymentMode,
 });
 await app.listen({ host: config.host, port: config.port });

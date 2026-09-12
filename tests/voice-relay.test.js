@@ -14,6 +14,7 @@ async function setup(resource = "sessions") {
     client = fakeLive();
   const app = await createApp(h.engine, {
     webRoot: "/absent",
+    testWorkspaceToken: "voice-relay-test",
     liveClient: client,
     voiceOptions: { closeMs: 50, checkpointMs: 20 },
     frontendOrigins: ["http://127.0.0.1:5173"],

@@ -150,7 +150,7 @@ it.each([1, 2])(
     expect(store.get(id).messages).toEqual(old.messages);
     store.recover();
     store.recover();
-    expect(store.db.pragma("user_version", { simple: true })).toBe(4);
+    expect(store.db.pragma("user_version", { simple: true })).toBe(5);
     expect(store.events(id).events.map((e) => e.type)).toEqual([
       "call_ended",
       "drill_interrupted",
@@ -175,7 +175,9 @@ it("does not fabricate a completed recap when cancelled work fails or returns la
 
 it("validates paginated public APIs and streams committed events across reconnects", async () => {
   const h = harness();
-  const app = await createApp(h.engine);
+  const app = await createApp(h.engine, {
+    testWorkspaceToken: "stage-test",
+  });
   cleanup.push(() => app.close());
   const { id, callId } = await ready(h);
   const url = await app.listen({ host: "127.0.0.1", port: 0 });
