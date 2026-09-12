@@ -43,6 +43,7 @@ jobs:
         run: |
           node scripts/gcp/build-image.js "$IMAGE_TAG"
           node scripts/gcp/container-smoke.js "$IMAGE_TAG"
+          node scripts/gcp/gateway-smoke.js "$IMAGE_TAG"
           image_id=$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG")
           printf 'image_id=%s\n' "$image_id" >> "$GITHUB_OUTPUT"
           docker save --output "$RUNNER_TEMP/rolecast-image.tar" "$IMAGE_TAG"

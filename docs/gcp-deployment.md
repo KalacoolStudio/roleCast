@@ -2,9 +2,9 @@
 
 Merging a pull request into `main` runs validation, builds and tests one Docker image, publishes that image to Artifact Registry, and replaces the running release by digest. The image serves the React frontend and Fastify API together. SQLite lives on a separate retained disk; daily and pre-release backups go to a private Cloud Storage bucket.
 
-This is one shared workspace with one active drill. Everyone granted application access can read its history and edit plots. A release or reboot interrupts an active drill and retains accepted messages; it does not resume model work. The interface discloses GCP storage and sharing. Inference content still goes to the configured external model provider.
+The VM runs one application process. Each browser has an isolated workspace with its own plots, history and active-drill limit. A release or reboot interrupts an active drill and retains accepted messages; it does not resume model work. The interface discloses GCP storage and sharing. Inference content still goes to the configured external model provider.
 
-The default region is Taiwan, `asia-east1`, zone `asia-east1-b`. Application access uses a Google-authenticated IAP tunnel and a loopback browser URL. IAP controls who may connect; the application assigns each browser an opaque HttpOnly workspace credential and isolates plots, drills, reports, streams, and voice operations by that workspace. This is browser-bound isolation rather than named application accounts: clearing cookies or changing browser profiles creates a new workspace.
+The default region is Taiwan, `asia-east1`, zone `asia-east1-b`. The baseline uses a Google-authenticated IAP tunnel and a loopback browser URL. The optional [public HTTPS gateway](#public-https-gateway) provides a Google-hosted browser address without a local tunnel. IAP controls who may connect; the application assigns each browser an opaque HttpOnly workspace credential and isolates plots, drills, reports, streams, and voice operations by that workspace. This is browser-bound isolation rather than named application accounts: clearing cookies or changing browser profiles creates a new workspace.
 
 ## Prerequisites and resource inventory
 
@@ -14,7 +14,7 @@ Use an existing billed project and an operator identity allowed to enable APIs, 
 | ----------------- | ---------------------------------------------------------------------------------------------------- |
 | Compute Engine    | One `e2-small` COS VM, 20 GB boot disk, external IPv4 for outbound requests                          |
 | SQLite storage    | Separate 10 GB `pd-balanced` disk, filesystem label `rolecast-data`, deletion protected in Terraform |
-| Network           | Dedicated VPC/subnet; ingress only from IAP's `35.235.240.0/20` to ports 8080 and 22                 |
+| Network           | Dedicated VPC/subnet; IAP to ports 8080/22; optional gateway subnet to 8080 only                 |
 | Artifact Registry | Private Docker repository, immutable tags, digest-based releases                                     |
 | Secret Manager    | Three secret containers, explicitly pinned numeric versions                                          |
 | Backups           | Private regional bucket; objects expire after 30 days by default                                     |
@@ -124,6 +124,38 @@ gh workflow run deploy-gcp.yml --repo KalacoolStudio/roleCast --ref main
 ```
 
 The summary distinguishes requested commit/image, operation outcome, actual current release and latest backup status. A failed candidate remains a failed workflow even when the previous image successfully recovers.
+
+## Public HTTPS gateway
+
+The optional Cloud Run gateway provides a stable Google-hosted `https://…run.app` address and managed TLS. It forwards frontend, API, SSE and voice WebSocket traffic to the existing VM over its private IP. The application and SQLite remain on the VM; normal main-branch releases and backups continue unchanged. Direct public VM ports 8080 and 22 remain blocked.
+
+Enable it first with restricted invocation in the ignored `infra/gcp/terraform.tfvars`:
+
+```hcl
+https_gateway_enabled = true
+https_gateway_access = "restricted"
+https_gateway_min_instances = 0
+```
+
+Review `terraform -chdir=infra/gcp plan`, ensuring the VM and retained disk are not replaced, then apply. Run `terraform -chdir=infra/gcp output -raw application_https_url` for the address. `restricted` mode requires an operator IAM identity token; it is a provisioning/maintenance state, not browser sign-in. Set the non-secret GitHub production variable `GCP_APPLICATION_URL` to this output so deployment summaries show it.
+
+Choose an access policy, then review and apply the updated Terraform plan:
+
+| `https_gateway_access` | Browser behavior |
+| --- | --- |
+| `restricted` | Only operator IAM invocation; ordinary browser requests are denied |
+| `iap` | Google sign-in plus the configured `application_users` HTTPS access grant |
+| `anonymous` | Anyone can create a browser workspace and use the project's model credits |
+
+For `iap` in a project without a Google organization, Google requires initial OAuth setup through the Cloud Console. Enable IAP for the Cloud Run service, configure an external consent screen and use the console's credential generation, then apply `iap` mode. Follow [Google's Cloud Run IAP setup](https://docs.cloud.google.com/run/docs/securing/identity-aware-proxy-cloud-run). Do not put OAuth client secrets into Terraform variables/state or GitHub variables. Google sign-in controls entry; workspaces remain tied to browser cookies and are not synchronized by Google account.
+
+Before selecting `anonymous`, deploy and verify schema 5 using restricted access. Existing unscoped records are assigned to the first browser workspace during migration: an operator must claim that workspace through the restricted path before opening the URL. Retain that operator cookie in a private cookie jar or browser profile. It is an access credential and must not be committed, printed, or shared in logs. A different hostname/profile creates a different workspace; public visitors must not receive the migrated history. Verify a second fresh browser cannot fetch a known operator plot or drill ID. Anonymous entry does not impose a per-person model billing quota.
+
+The dedicated gateway identity has no model-secret or backup/data permissions. Its fixed upstream and private `/26` subnet prevent it from becoming an arbitrary proxy. NGINX preserves Host, Origin and workspace cookies, enforces the HTTPS scheme, strips forwarded-host claims and disables stream buffering. Configuration lives in `infra/gcp/gateway.conf.tftpl`; the official NGINX image is pinned in `gateway-image.txt`.
+
+Cloud Run requests, CPU/memory time and egress can incur additional charges. Open SSE/WebSocket connections keep an instance active; a one-hour request timeout still applies. Direct VPC cold starts can take a minute or more, so the startup probe verifies backend connectivity. Set `https_gateway_min_instances = 1` to reduce cold starts with additional idle-instance cost. The gateway caps each revision at two instances, while all forward to the same backend. See [Direct VPC limitations](https://docs.cloud.google.com/run/docs/configuring/vpc-direct-vpc) and [streaming behavior](https://docs.cloud.google.com/run/docs/triggering/websockets).
+
+To withdraw public entry, set `https_gateway_access = "restricted"` and apply. IAP administration, the VM, database and backups remain intact. The gateway has deletion protection; access withdrawal does not require deleting it. The main application deployment workflow does not grant itself Terraform privileges or alter this access policy.
 
 ## Private browser access and health
 

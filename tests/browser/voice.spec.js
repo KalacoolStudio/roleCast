@@ -161,6 +161,11 @@ test("Judge stops voice playback and report opens the exact voice evidence", asy
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   expect((await stats(page.request)).connections.at(-1).greetings).toBe(1);
+  // The first microphone frame emits another fixture utterance. Wait for it
+  // before injecting the later evidence, so capture timing cannot reorder them.
+  await expect(page.locator(".voice-message.user > p")).toContainText(
+    "我想先瞭解情況。",
+  );
   await control(page.request, { action: "play" });
   await expect
     .poll(() => page.evaluate(() => window.voiceTest.outputs))
@@ -171,10 +176,13 @@ test("Judge stops voice playback and report opens the exact voice evidence", asy
   });
   await expect(page.locator(".report")).toBeVisible();
   await released(page);
-  await page.locator(".evidence a").first().click();
-  await expect(page.locator(".voice-evidence[open] > p").last()).toContainText(
-    "查證",
-  );
+  const evidence = page.locator(".evidence a").first();
+  const anchor = await evidence.getAttribute("href");
+  await expect(evidence).toContainText("查證");
+  await evidence.click();
+  await expect(page.locator(anchor)).toBeVisible();
+  await expect(page.locator(anchor)).toContainText("查證");
+  await expect(page.locator(anchor).locator("..")).toHaveAttribute("open", "");
   await expect(page.locator(".call-end")).toHaveText("本通演練已結束");
 });
 test("permission denial creates no provider; retry succeeds; reload releases voice without reacquiring", async ({

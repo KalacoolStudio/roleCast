@@ -1,11 +1,11 @@
 ## Purpose
 
-Define how the existing single-workspace application operates on GCP while keeping browser access private, configuration confidential, and local development compatible.
+Define how the existing single-process application operates on GCP while keeping backend access private, configuration confidential, and local development compatible.
 
 ## ADDED Requirements
 
 ### Requirement: Complete release runtime
-The GCP release SHALL serve the built frontend and backend API from the same browser origin. It SHALL run one application process with execution available between HTTP requests, so accepted asynchronous model operations can finish while the browser polls for results. It SHALL preserve the existing restriction to one active exercise in the shared workspace and the existing voice capability when provider access is configured. Voice HTTP and WebSocket requests SHALL use the same private application tunnel.
+The GCP release SHALL serve the built frontend and backend API from the same browser origin. It SHALL run one application process with execution available between HTTP requests, so accepted asynchronous model operations can finish while the browser polls for results. It SHALL preserve the existing restriction to one active exercise per browser workspace and the existing voice capability when provider access is configured. Voice HTTP and WebSocket requests SHALL use the same browser origin through IAP or the optional gateway defined by `gcp-public-access`.
 
 #### Scenario: Use the deployed application
 - **WHEN** an authorized user opens a healthy deployed release and starts an exercise
@@ -16,11 +16,11 @@ The GCP release SHALL serve the built frontend and backend API from the same bro
 - **THEN** the same-origin reservation and WebSocket relay are accepted while unrelated origins and forwarded-host spoofing remain rejected
 
 #### Scenario: Another exercise is already active
-- **WHEN** another authorized user attempts to start an exercise while one is active
-- **THEN** the application returns the existing conflict behavior and identifies the shared active exercise
+- **WHEN** the same browser workspace attempts to start an exercise while one is active
+- **THEN** the application returns the existing conflict behavior and identifies that workspace's active exercise
 
 ### Requirement: Private browser and administrative access
-The deployment SHALL require Google Cloud IAP authorization before a user can reach the application through a documented local tunnel. The application and administrative ports SHALL reject direct public internet ingress. Access grants SHALL distinguish application users from deployment administrators; application access alone SHALL NOT grant a VM shell or deployment privileges. Existing browser-origin rejection SHALL remain enabled for untrusted origins.
+The baseline deployment SHALL require Google Cloud IAP authorization for its documented local tunnel. An explicitly enabled HTTPS gateway SHALL follow `gcp-public-access` and reach only the private backend; its access policy does not change IAP administrative grants. The application and administrative ports SHALL reject direct public internet ingress. Access grants SHALL distinguish application users from deployment administrators; application access alone SHALL NOT grant a VM shell or deployment privileges. Existing browser-origin rejection SHALL remain enabled for untrusted origins.
 
 #### Scenario: Authorized browser access
 - **WHEN** a configured application user establishes the documented application tunnel
@@ -57,7 +57,7 @@ Production credentials SHALL be retrieved at runtime from explicitly configured 
 - **THEN** startup fails clearly without emitting the secret value or substituting a test provider
 
 ### Requirement: Accurate storage and sharing disclosure
-In cloud mode, the interface and documentation SHALL state that records are stored in the configured GCP deployment and shared with its authorized users, and that inference content is sent to the configured model provider. Cloud mode SHALL NOT describe the records as stored only on the user's own machine or imply per-user private histories.
+In cloud mode, the interface and documentation SHALL state that records are stored in the configured GCP deployment and isolated by browser workspace, and that inference content is sent to the configured model provider. Cloud mode SHALL NOT describe the records as stored only on the user's own machine or imply that browser workspaces are named accounts synchronized between devices.
 
 #### Scenario: Cloud data notice
 - **WHEN** a user views the deployed workspace before beginning an exercise
