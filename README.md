@@ -66,6 +66,8 @@ just start
 
 ### GitHub Actions → GCP
 
+公開網址：[Role Cast](https://rolecast-gateway-pzc7so2xgq-de.a.run.app)。任何取得連結的人都能使用，不需登入；每個瀏覽器有獨立工作區。
+
 依 [GCP 部署指南](docs/gcp-deployment.md) 完成一次性的 Terraform、Secret Manager 與 GitHub `production` environment 設定後，合併至 `main` 會自動驗證、建置並部署前端與 API。SQLite 使用獨立持久磁碟，備份保存在私有 Cloud Storage；不會上傳開發者的 `.env` 或本機資料。
 
 可啟用 [公開 HTTPS gateway](docs/gcp-deployment.md#public-https-gateway)，取得 Google 提供的 `https://…run.app` 網址，直接在瀏覽器使用，不需本機 tunnel。入口可設定為指定 Google 帳號登入或匿名存取；匿名使用者仍會消耗專案的模型額度。前端、API、SSE 與語音共用同一 HTTPS 網址，SQLite 保留在原本的 VM 持久磁碟。

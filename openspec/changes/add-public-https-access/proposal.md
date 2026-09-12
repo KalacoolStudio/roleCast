@@ -6,7 +6,7 @@ RoleCast is deployed on GCP but currently requires a local IAP tunnel. Users nee
 
 - Add a Google-hosted Cloud Run HTTPS gateway that forwards frontend, API, streaming events and voice WebSockets to the existing VM over a dedicated private VPC subnet.
 - Keep the VM application and SSH ports closed to direct internet ingress, and keep model credentials and database storage on the existing VM.
-- Make gateway access explicit: Google IAP sign-in for configured users, or anonymous browser access when selected by the operator. The production access choice is pending the user's answer; it must be settled before granting anonymous access.
+- Make gateway access explicit: Google IAP sign-in for configured users, or anonymous browser access when selected by the operator. The user selected anonymous access for anyone with the link on 2026-09-12.
 - Preserve main's browser-workspace isolation and schema-5 migration. Verify existing data is assigned to an operator workspace before anonymous access is enabled.
 - Repair deployment-test integration with workspace cookies and deterministic voice evidence, and exercise the proxy's streaming, Origin and cookie behavior.
 - Document the public URL, access configuration, costs, deployment continuity and rollback of the gateway. Reconcile the earlier deployment change's private-only and shared-history wording with the optional gateway and current workspace behavior.
