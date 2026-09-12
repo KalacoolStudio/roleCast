@@ -131,6 +131,10 @@ Plot 定義保存在 SQLite。內建 JSON 僅於資料庫缺少對應 ID 時載�
 
 素材位於 `apps/web/public/assets/characters/warm/`，圖格與腳底對齊設定位於 `apps/web/src/stage/sprites.js`。原始 PNG 保留，顯示時裁切影格與混合淺色紙底；目前使用素色區域，未加入辦公室背景。
 
+## GPT Live 模組
+
+獨立的 [`@role-cast/gpt-live`](packages/gpt-live/README.md) 提供 `gpt-live-1` 的 WebSocket 音訊、WebRTC SDP 交換與 sideband 控制，包含可測試的使用範例。由呼叫端明確傳入 OpenAI 憑證；現有文字演練不需要 Live 設定。後續可透過此模組整合語音、逐字稿與 Judge 播放控制。
+
 ## 資料與金鑰
 
 `.env` 僅由後端讀取，金鑰不送至瀏覽器、不寫入資料庫或日誌。`.env` 與 `data/` 已由 Git 忽略；請勿在 `VITE_` 開頭的設定放入秘密。
