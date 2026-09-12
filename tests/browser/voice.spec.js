@@ -84,8 +84,15 @@ test("voice-first speaks and saves speech automatically, mutes, and returns to t
   page,
   request,
 }) => {
+  await page.route("**/api/runtime", (route) =>
+    route.fulfill({ json: { deploymentMode: "gcp" } }),
+  );
   await start(page);
   await page.getByRole("button", { name: "用語音接通" }).click();
+  await expect(page.locator(".voice-panel small")).toContainText(
+    "逐字稿保存在 GCP，並與授權使用者共用",
+  );
+  await expect(page.locator(".voice-panel small")).not.toContainText("本機");
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await expect(page.getByLabel("你的回覆")).toBeDisabled();
   await expect(page.locator(".voice-message.persona > p")).toHaveText(

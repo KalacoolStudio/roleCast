@@ -636,8 +636,13 @@ function App() {
                       )
                     )}
                     <small>
-                      語音會傳送至 OpenAI；本機僅保存逐字稿。每通累計{" "}
-                      {drill.plot.maxVoiceSecondsPerCall ?? 180}{" "}
+                      語音會傳送至 OpenAI；
+                      {deploymentMode === "gcp"
+                        ? "逐字稿保存在 GCP，並與授權使用者共用。"
+                        : deploymentMode === "local"
+                          ? "本機僅保存逐字稿。"
+                          : "逐字稿儲存位置確認中。"}
+                      每通累計 {drill.plot.maxVoiceSecondsPerCall ?? 180}{" "}
                       秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
                       逐字稿可能不完整，播放狀態不代表整句已聽完。
                     </small>
