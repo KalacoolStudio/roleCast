@@ -5,11 +5,15 @@ Define how the existing single-workspace application operates on GCP while keepi
 ## ADDED Requirements
 
 ### Requirement: Complete release runtime
-The GCP release SHALL serve the built frontend and backend API from the same browser origin. It SHALL run one application process with execution available between HTTP requests, so accepted asynchronous model operations can finish while the browser polls for results. It SHALL preserve the existing restriction to one active exercise in the shared workspace.
+The GCP release SHALL serve the built frontend and backend API from the same browser origin. It SHALL run one application process with execution available between HTTP requests, so accepted asynchronous model operations can finish while the browser polls for results. It SHALL preserve the existing restriction to one active exercise in the shared workspace and the existing voice capability when provider access is configured. Voice HTTP and WebSocket requests SHALL use the same private application tunnel.
 
 #### Scenario: Use the deployed application
 - **WHEN** an authorized user opens a healthy deployed release and starts an exercise
 - **THEN** the frontend loads, API requests reach that release, and accepted model work progresses after the initiating request has returned
+
+#### Scenario: Voice through the private tunnel
+- **WHEN** a configured user starts voice from the documented loopback browser URL, whose local port differs from the container port
+- **THEN** the same-origin reservation and WebSocket relay are accepted while unrelated origins and forwarded-host spoofing remain rejected
 
 #### Scenario: Another exercise is already active
 - **WHEN** another authorized user attempts to start an exercise while one is active

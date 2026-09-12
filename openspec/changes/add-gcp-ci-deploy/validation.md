@@ -4,7 +4,7 @@ Validated on 2026-09-12 in the isolated `roleCast-task-2` worktree on `gcp-ci-de
 
 ## Integration and versions
 
-Integrated GitHub main `ff312805dcefc58c8473384f2efc103d72fd0d41`, including customizable plots/drills, character assets, live drill stage and stricter model-output contracts. Resolved the API/frontend overlaps while preserving plot authoring, legacy session routes and cloud metadata/disclosures. The storage schema is now **3**; the backup compatibility helper imports the storage schema constant. The concurrent worktree continues independently; no uncommitted files or processes were imported from it.
+Integrated GitHub main `8a66cfed48d45722eed1cdae3b6874fa35d68214`, including customizable plots/drills, refreshed stage artwork, GPT Live voice and the consolidated canonical specs. Resolved configuration, API, frontend, storage and browser-fixture conflicts while preserving the existing features and cloud metadata/disclosures. The storage schema is now **4**; the backup compatibility helper imports the storage schema constant. The concurrent worktree continues independently; no uncommitted files or processes were imported from it.
 
 | Component | Tested version |
 | --- | --- |
@@ -17,7 +17,7 @@ Integrated GitHub main `ff312805dcefc58c8473384f2efc103d72fd0d41`, including cus
 | actionlint / OpenSpec CLI | 1.7.12 / 1.10.0 |
 | Local container engine | Docker 29.7.2, isolated rootless daemon with rootlesskit 3.1.0 and slirp4netns 1.3.5 |
 
-Actions are pinned by full commit SHA. Terraform and actionlint release downloads were checksum verified. The final local production image ID is `sha256:c7f52f505320f2e1218df15108bf3dc9bc14826d9ce0625c21ccf623cf5e2968`. This is a local image ID, **not a published Artifact Registry manifest digest**. A registry digest and deployed commit will be recorded by the first successful live workflow.
+Actions are pinned by full commit SHA. Terraform and actionlint release downloads were checksum verified. The final local production image ID is `sha256:f87baf300ff5c9bd74a1143d8756d09b3a30efd3e6cfa1e9aab4a8b06239df37`. This is a local image ID, **not a published Artifact Registry manifest digest**. A registry digest and deployed commit will be recorded by the first successful live workflow.
 
 ## Executed checks
 
@@ -26,17 +26,21 @@ Actions are pinned by full commit SHA. Terraform and actionlint release download
 | Locked dependency install and native SQLite loading | Passed locally and during clean container builds |
 | `npm run check` | Passed ESLint and Prettier |
 | `npm run build` | Passed; integrated plot editor and frontend assets built |
-| `npm run test:unit` | **87 tests passed**, 10 files |
-| `ROLECAST_TEST_PORT=3312 npm run test:e2e` | **13 tests passed**, including plot editor, live-stage/SSE behavior and cloud disclosure/error recovery |
+| `npm run test:unit` | **222 tests passed**, 18 files |
+| `ROLECAST_TEST_PORT=3312 npm run test:e2e` | **19 tests passed**, including plots, live-stage/SSE, voice controls/recovery/evidence and cloud disclosures |
 | `node scripts/gcp/build-image.js rolecast:gcp-ci-deploy` | Passed; disposable nested env sentinel and local env/data excluded |
 | `node scripts/gcp/container-smoke.js rolecast:gcp-ci-deploy` | Passed with networking disabled and disposable data/restore volumes |
 | Docker image artifact round trip | Save/load preserves the exact tested image ID |
 | Terraform format, backend-free init/validate | Passed with pinned provider lockfile |
 | `terraform test` | **4 mock-provider tests passed** |
 | actionlint with ShellCheck 0.11.0 and `bash -n` | Passed workflow and shell checks |
-| GitHub CI for code commit `3f5e98f` | Both application and infrastructure jobs passed: [run 34676334533](https://github.com/KalacoolStudio/roleCast/actions/runs/34676334533) |
+| Earlier GitHub CI before voice integration | Both application and infrastructure jobs passed: [run 34676334533](https://github.com/KalacoolStudio/roleCast/actions/runs/34676334533); the integrated head is checked separately on the PR |
 | `git diff --check` and merge-conflict inspection | Passed |
 | `openspec validate add-gcp-ci-deploy --strict` | Passed |
+
+The integrated runtime maps the existing `rolecast-llm-api-key` secret to main's shared `API_KEY`, preserving the three approved secret payloads and resource names. The approved text endpoint is OpenAI and this value matches the pre-existing shared key. A configuration-boundary test verifies the fetched env file enables both text and voice configuration; the production container also checks public voice capability without contacting a model provider. Actual paid-provider voice/media acceptance remains distinct from these fixture checks.
+
+Voice origin validation now accepts same-host loopback HTTP from the IAP forwarding port, which differs from the backend port. Regression tests exercise the real reservation and WebSocket/PCM path with controlled voice clients, reject unrelated origins, and reject spoofed `X-Forwarded-Host`. Existing HTTPS tunnel behavior remains covered.
 
 The container smoke verifies production frontend/API serving, UID 1000, read-only container root, missing-volume rejection, root-run compatibility checks followed by a non-root restart, accepted asynchronous work, interrupted-drill recovery with accepted messages, online backup verification, and restoration to a second disposable volume. It calls no production model provider.
 
@@ -90,14 +94,14 @@ Bootstrap logs and receipts are stored under the ignored local `.tmp/` directory
 | Release recovery: compatible/incompatible prior image | Host rollback, schema refusal, failed recovery and no-prior-image tests; direct schema helper rejects newer database without migration |
 | Explicit restoration: selected/invalid backup | Real isolated-volume restore, checksum corruption rejection, host pre-validation and SQLite/WAL/SHM preservation tests; isolated restore of actual GCS backup pending |
 
-The older unarchived MVP change describes **local** runtime behavior. This change explicitly adds GCP mode and keeps its local defaults; README and UI now distinguish storage/sharing by mode. Main's plot authoring remains a trusted shared workspace. No unrelated changes were archived or rewritten. Recheck integration if main advances again before merge.
+Main has consolidated and archived its earlier text, plots, stage and voice changes. This deployment change now includes a `local-runtime` disclosure delta against those canonical specs, while preserving local defaults and archived history. Main's plot authoring remains a trusted shared workspace. Recheck integration if main advances again before merge.
 
 ## Pending live acceptance — task 6.5
 
 Infrastructure, approved identities, versioned secrets and GitHub production variables are ready. [PR #1](https://github.com/KalacoolStudio/roleCast/pull/1) contains the implementation; merging it is the next production-changing action and will trigger the first current-main deployment.
 
 1. Merge the reviewed deployment change, then record the main run URL, commit, tested image ID, published digest and `host.sh status`. Retry only at current main if necessary.
-2. Verify frontend, `/api/health`, `/api/runtime`, plot authoring and one deliberate model exercise through an authorized app-only identity. Verify this identity cannot SSH and an ungranted identity cannot tunnel. Recheck public-port rejection with the real application running.
+2. Verify frontend, `/api/health`, `/api/runtime`, plot authoring and one deliberate model exercise through an authorized app-only identity; verify the voice route and configured provider behavior without treating fixture audio as a real-device check. Verify this identity cannot SSH and an ungranted identity cannot tunnel. Recheck public-port rejection with the real application running.
 3. Verify required validation failure blocks deployment and incorrect OIDC claims cannot impersonate the deployment identity. Exercise overlapping updates and a failed candidate in an isolated rehearsal environment, recording distinct failed/rolled-back/skipped outcomes.
 4. Retain a test record across a release and VM reboot; confirm an active drill becomes interrupted without losing accepted messages. Record the retained disk identity. The completed bootstrap reboot checked filesystem persistence only.
 5. Run a live database backup, verify private GCS database/manifest objects and status freshness, download with a restore-operator identity, and restore to a separate disposable destination. Confirm plots, drill history and checksum/schema without replacing production data.

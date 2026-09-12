@@ -87,65 +87,53 @@
 }
 .stage-canvas {
   position: relative;
-  height: clamp(380px, 34vw, 490px);
+  display: flex;
+  justify-content: center;
   overflow: hidden;
   isolation: isolate;
-  background: #fffefa;
+  background: #e8bb8d;
 }
-.stage-zone {
-  position: absolute;
-  border: 1px solid #e7e9df;
-  border-radius: 30px;
-  background: #f6f7ef;
+.stage-map {
+  position: relative;
+  width: min(100%, 653px);
+  aspect-ratio: 1446 / 1087;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: url("/assets/backgrounds/office.png") center / 100% 100% no-repeat;
 }
-.stage-zone > span {
-  position: absolute;
-  top: 10px;
-  left: 15px;
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: #89977e;
-}
-.work-zone {
-  left: 8%;
-  top: 9%;
-  width: 46%;
-  height: 36%;
-}
-.call-zone {
-  left: 60%;
-  top: 40%;
-  width: 35%;
-  height: 34%;
-  background: #eff4e9;
-  border-color: #d5dfcc;
-}
-.call-zone i {
-  display: block;
-  position: absolute;
-  inset: 35% 20% 10%;
-  border: 1px dashed #d2dec7;
-  border-radius: 50%;
-}
+.stage-location,
 .stage-entrance,
 .stage-waiting,
 .stage-report-spot {
   position: absolute;
   font-size: 9px;
-  color: #9aaa90;
   letter-spacing: 1px;
+  color: #6b321c;
+  padding: 4px 7px;
+  border: 1px solid rgb(124 57 27 / 28%);
+  border-radius: 999px;
+  background: rgb(255 244 222 / 82%);
+  box-shadow: 0 2px 8px rgb(91 45 18 / 10%);
+}
+.stage-boss-desk {
+  left: 63%;
+  top: 9%;
+}
+.stage-call-desk {
+  left: 46%;
+  top: 84%;
 }
 .stage-entrance {
-  left: 2%;
-  top: 87%;
+  left: 3%;
+  top: 91%;
 }
 .stage-waiting {
-  left: 24%;
-  top: 87%;
+  left: 11%;
+  top: 56%;
 }
 .stage-report-spot {
-  left: 42%;
-  top: 44%;
+  left: 53%;
+  top: 35%;
 }
 .stage-character {
   --sprite-width: clamp(64px, 7.5vw, 100px);
@@ -157,7 +145,6 @@
     left var(--move-duration, 600ms) linear,
     top var(--move-duration, 600ms) linear;
   pointer-events: none;
-  mix-blend-mode: multiply;
 }
 .sprite-window {
   width: 100%;
@@ -171,6 +158,7 @@
   height: 200%;
   max-width: none;
   user-select: none;
+  filter: drop-shadow(0 2px 2px rgb(71 34 16 / 28%));
 }
 .character-bubble {
   position: absolute;
@@ -199,6 +187,10 @@
   white-space: nowrap;
   font-size: 11px;
   color: #3b5031;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: rgb(255 250 237 / 80%);
+  box-shadow: 0 2px 7px rgb(71 34 16 / 10%);
 }
 .character-name small {
   display: block;
@@ -267,9 +259,6 @@
   .stage-panel {
     position: static;
   }
-  .stage-canvas {
-    height: 430px;
-  }
   .stage-character {
     --sprite-width: 95px;
   }
@@ -290,9 +279,6 @@
   .stage-toolbar h2 {
     font-size: 16px;
   }
-  .stage-canvas {
-    height: 350px;
-  }
   .stage-character {
     --sprite-width: 65px;
   }
@@ -305,6 +291,10 @@
   }
   .character-name small {
     font-size: 7px;
+  }
+  .stage-location,
+  .stage-report-spot {
+    display: none;
   }
   .stage-caption {
     padding: 10px 12px;

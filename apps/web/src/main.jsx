@@ -4,6 +4,8 @@ import { PlotEditor } from "./PlotEditor.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import { useVoice } from "./use-voice.js";
+import { Conversation } from "./conversation.jsx";
 
 const labels = {
   planning: "正在安排對話",
@@ -20,12 +22,13 @@ const ends = {
   persona: "對方已結束通話",
   judge: "本通演練已結束",
   turn_limit: "已達本通回合上限",
+  voice_duration_limit: "已達本通語音時間上限",
   user_finish: "你已結束演練",
   failed: "處理失敗",
   interrupted: "服務已中斷",
 };
 const finished = (s) => ["completed", "failed", "interrupted"].includes(s);
-async function api(path, body, method = "POST") {
+async function api(path, body, method = "POST", signal) {
   const response = await fetch(
     `/api${path}`,
     body === undefined
@@ -34,6 +37,7 @@ async function api(path, body, method = "POST") {
           method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal,
         },
   );
   const data = await response.json();
@@ -44,6 +48,7 @@ async function api(path, body, method = "POST") {
     );
   return data;
 }
+const voiceApi = (path, body, signal) => api(path, body, "POST", signal);
 const date = (value) =>
   new Date(value).toLocaleString("zh-TW", {
     month: "short",
@@ -69,9 +74,14 @@ function App() {
   const [managing, setManaging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [deploymentMode, setDeploymentMode] = useState(null);
+  const voice = useVoice(id, drill, voiceApi);
+  const following = useRef(true);
+  const [follow, setFollow] = useState(true);
   const selected = useRef(id),
-    bottom = useRef(null);
+    transcript = useRef(null);
   const select = useCallback((next) => {
+    following.current = true;
+    setFollow(true);
     setManaging(false);
     selected.current = next;
     setId(next);
@@ -143,8 +153,9 @@ function App() {
     };
   }, [id, loadList]);
   useEffect(() => {
-    bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [drill?.calls.at(-1)?.messages.length]);
+    if (following.current && drill?.state === "in_call")
+      transcript.current?.scrollTo({ top: transcript.current.scrollHeight });
+  }, [drill?.calls.at(-1)?.messages.length, voice.events.length, drill?.state]);
   const action = async (fn) => {
     setActing(true);
     setError("");
@@ -165,13 +176,27 @@ function App() {
     });
   const command = (path, body = {}) =>
     action(async () => {
+      if (path.endsWith("/hangup") || path === "/finish") voice.stop();
       await api(`/drills/${id}${path}`, body);
       await refresh(id);
     });
   const call = drill?.calls.find((c) => c.id === drill.currentCallId);
+  const voiceMode = voice.active || call?.inputMode === "voice";
+  const startVoice = () =>
+    voice.start(async () => {
+      if (drill.pendingCall) {
+        const accepted = await api(`/drills/${id}/calls/accept`, {
+          assignmentId: drill.pendingCall.assignmentId,
+          mode: "voice",
+        });
+        await refresh(id);
+        return accepted.callId;
+      }
+      return call.id;
+    });
   const send = (event) => {
     event.preventDefault();
-    if (!text.trim() || !call) return;
+    if (!text.trim() || !call || voiceMode) return;
     action(async () => {
       const key = "role-cast-pending";
       let pending;
@@ -236,7 +261,10 @@ function App() {
         </button>
         <button
           className={`nav-item ${managing ? "selected" : ""}`}
-          onClick={() => setManaging(true)}
+          onClick={() => {
+            voice.stop();
+            setManaging(true);
+          }}
         >
           劇本工作室
         </button>
@@ -283,7 +311,7 @@ function App() {
             : deploymentMode === "local"
               ? "本機工作空間"
               : "正在連線…"}
-          <small>文字版 · 0.1</small>
+          <small>對話演練 · 0.1</small>
         </div>
       </aside>
       <main>
@@ -296,7 +324,7 @@ function App() {
                 ? "演練現場 · DRILL"
                 : "劇本練習 · PLOT"}
           </span>
-          <span className="badge">TEXT EDITION</span>
+          <span className="badge">ROLE PLAY</span>
         </header>
         {error && (
           <div className="error" role="alert">
@@ -358,7 +386,7 @@ function App() {
                   <p>{s.description}</p>
                   <div className="card-bottom">
                     <span>{s.duration}</span>
-                    <span>文字互動</span>
+                    <span>文字 / 語音互動</span>
                   </div>
                 </button>
               ))}
@@ -443,6 +471,11 @@ function App() {
                 {drill.error.message}
               </div>
             )}
+            {voice.error && (
+              <div className="error" role="alert">
+                {voice.error}
+              </div>
+            )}
             <div className="drill-workspace">
               <DrillStage
                 key={drill.id}
@@ -464,7 +497,7 @@ function App() {
                     </div>
                     <button
                       className="primary"
-                      disabled={acting}
+                      disabled={acting || voice.active}
                       onClick={() =>
                         command("/calls/accept", {
                           assignmentId: drill.pendingCall.assignmentId,
@@ -473,9 +506,26 @@ function App() {
                     >
                       接通對話 ↗
                     </button>
+                    <button
+                      className="voice-start"
+                      disabled={acting || voice.active || !voice.available}
+                      onClick={startVoice}
+                    >
+                      用語音接通
+                    </button>
                   </section>
                 )}
-                <div className="transcript">
+                <div
+                  className="transcript"
+                  ref={transcript}
+                  onScroll={(event) => {
+                    const node = event.currentTarget;
+                    following.current =
+                      node.scrollHeight - node.clientHeight - node.scrollTop <
+                      80;
+                    setFollow(following.current);
+                  }}
+                >
                   {!drill.calls.length && !drill.pendingCall && (
                     <div className="waiting">
                       {finished(drill.state)
@@ -500,18 +550,12 @@ function App() {
                         )}
                       </div>
                       <div className="messages">
-                        {c.messages.map((m) => (
-                          <div
-                            id={`message-${m.id}`}
-                            key={m.id}
-                            className={`message ${m.speaker}`}
-                          >
-                            <small>
-                              {m.speaker === "user" ? "你" : c.persona.name}
-                            </small>
-                            <p>{m.text}</p>
-                          </div>
-                        ))}
+                        <Conversation
+                          call={c}
+                          events={voice.events.filter(
+                            (e) => e.sessionId === id,
+                          )}
+                        />
                         {!c.endedAt && drill.busy && (
                           <div className="typing" aria-label="正在處理回合">
                             <span />
@@ -522,8 +566,83 @@ function App() {
                       </div>
                     </section>
                   ))}
-                  <div ref={bottom} />
                 </div>
+                {!follow && drill.state === "in_call" && (
+                  <button
+                    className="follow-conversation"
+                    onClick={() => {
+                      following.current = true;
+                      setFollow(true);
+                      transcript.current?.scrollTo({
+                        top: transcript.current.scrollHeight,
+                        behavior: "smooth",
+                      });
+                    }}
+                  >
+                    回到最新對話 ↓
+                  </button>
+                )}
+                {(drill.state === "in_call" || drill.pendingCall) && (
+                  <div className="voice-panel">
+                    <div role="status">
+                      {voice.state === "preparing"
+                        ? "正在準備麥克風…"
+                        : voice.state === "connecting"
+                          ? "正在連接語音…"
+                          : voice.state === "active"
+                            ? voice.muted
+                              ? "麥克風已靜音"
+                              : "語音已連線，直接說話即可"
+                            : call?.inputMode === "voice"
+                              ? "語音正在其他頁面使用或正在結束…"
+                              : voice.available
+                                ? "開啟語音後，直接說話即可自動回覆。"
+                                : "語音尚未設定，可繼續使用文字。"}
+                    </div>
+                    {voice.state === "active" && (
+                      <span className="voice-playback">
+                        {voice.playing ? "對方正在說話" : "等候對方說話"}
+                        {voice.mutePending ? " · 正在切換麥克風…" : ""}
+                      </span>
+                    )}
+                    {voice.active ? (
+                      <div className="voice-buttons">
+                        <button
+                          disabled={
+                            voice.state !== "active" || voice.mutePending
+                          }
+                          onClick={voice.mute}
+                        >
+                          {voice.muted ? "取消靜音" : "麥克風靜音"}
+                        </button>
+                        <button onClick={voice.stop}>改用文字</button>
+                      </div>
+                    ) : (
+                      drill.state === "in_call" && (
+                        <button
+                          className="voice-start"
+                          disabled={
+                            acting ||
+                            drill.busy ||
+                            voiceMode ||
+                            !voice.available
+                          }
+                          onClick={startVoice}
+                        >
+                          {voice.error?.startsWith("音訊播放")
+                            ? "啟用聲音"
+                            : "開啟語音"}
+                        </button>
+                      )
+                    )}
+                    <small>
+                      語音會傳送至 OpenAI；本機僅保存逐字稿。每通累計{" "}
+                      {drill.plot.maxVoiceSecondsPerCall ?? 180}{" "}
+                      秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
+                      逐字稿可能不完整，播放狀態不代表整句已聽完。
+                    </small>
+                  </div>
+                )}
                 {drill.state === "in_call" && (
                   <form className="composer" onSubmit={send}>
                     <label className="sr-only" htmlFor="message">
@@ -534,13 +653,15 @@ function App() {
                       placeholder="寫下你的回覆…"
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      disabled={acting || drill.busy}
+                      disabled={acting || drill.busy || voiceMode}
                       maxLength={4000}
                     />
                     <button
                       className="primary"
                       type="submit"
-                      disabled={acting || drill.busy || !text.trim()}
+                      disabled={
+                        acting || drill.busy || voiceMode || !text.trim()
+                      }
                     >
                       送出 ↑
                     </button>
@@ -637,9 +758,10 @@ function Evidence({ ids, messages }) {
             href={`#message-${id}`}
             onClick={(event) => {
               event.preventDefault();
-              document
-                .getElementById(`message-${id}`)
-                ?.scrollIntoView({ behavior: "smooth" });
+              const target = document.getElementById(`message-${id}`);
+              const detail = target?.closest("details");
+              if (detail) detail.open = true;
+              target?.scrollIntoView({ behavior: "smooth" });
             }}
           >
             「{m.text.slice(0, 60)}

@@ -1,0 +1,14 @@
+{
+  "name": "@role-cast/gpt-live",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "openai": "7.15.0",
+    "ws": "8.21.3"
+  }
+}

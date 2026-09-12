@@ -101,7 +101,6 @@ export function CharacterSprite({ kind, character, reduced = false }) {
             style={{
               left: `${-(frame % 4) * 100}%`,
               top: `${-Math.floor(frame / 4) * 100}%`,
-              filter: `brightness(${sprite.brightness})`,
             }}
           />
         </div>
@@ -195,33 +194,30 @@ export function DrillStage({ drill, events, resetKey, connection }) {
         · {drill.busy ? "正在回覆…" : "對話進行中"} · Judge 監看中
       </div>
       <div className="stage-canvas" data-phase={scene.phase}>
-        <div className="stage-zone work-zone">
-          <span>01 / 調度區</span>
-        </div>
-        <div className="stage-zone call-zone">
-          <span>02 / 通話區</span>
-          <i />
-        </div>
-        <span className="stage-entrance">入口 →</span>
-        <span className="stage-waiting">候場</span>
-        <span className="stage-report-spot">回報位</span>
-        <CharacterSprite
-          kind="mastermind"
-          character={scene.mastermind}
-          reduced={reduced || hidden}
-        />
-        <CharacterSprite
-          kind="judge"
-          character={scene.judge}
-          reduced={reduced || hidden}
-        />
-        {scene.persona && (
+        <div className="stage-map">
+          <span className="stage-location stage-boss-desk">調度區</span>
+          <span className="stage-location stage-call-desk">通話區</span>
+          <span className="stage-entrance">入口 →</span>
+          <span className="stage-waiting">候場</span>
+          <span className="stage-report-spot">回報位</span>
           <CharacterSprite
-            kind="persona"
-            character={scene.persona}
+            kind="mastermind"
+            character={scene.mastermind}
             reduced={reduced || hidden}
           />
-        )}
+          <CharacterSprite
+            kind="judge"
+            character={scene.judge}
+            reduced={reduced || hidden}
+          />
+          {scene.persona && (
+            <CharacterSprite
+              kind="persona"
+              character={scene.persona}
+              reduced={reduced || hidden}
+            />
+          )}
+        </div>
       </div>
       <div className="stage-caption">
         <span

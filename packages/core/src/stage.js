@@ -56,7 +56,7 @@ export function stageEvents(before, after, stage) {
     });
     add("turn_started", { callId: c.id });
   }
-  for (const m of newItems("messages"))
+  for (const m of newItems("messages").filter((m) => m.source !== "voice"))
     add(m.speaker === "user" ? "turn_started" : "turn_completed", {
       callId: m.callId,
       messageId: m.id,

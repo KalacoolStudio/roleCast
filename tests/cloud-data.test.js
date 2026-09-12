@@ -10,6 +10,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
+import { parse } from "dotenv";
+import { loadConfig } from "../apps/server/src/config.js";
 import {
   backupDatabase,
   assertCompatible,
@@ -44,7 +46,7 @@ it("backs up committed WAL data without interrupting the active exercise", async
     commit: "fixture",
     image: "fixture-image",
   });
-  expect(manifest.schema).toBe(3);
+  expect(manifest.schema).toBe(4);
   expect(h.store.get(id)).toEqual(before);
   const backup = new Database(target, { readonly: true });
   expect(
@@ -103,7 +105,9 @@ it("fetches pinned secrets into a private env file and preserves it on failed re
   const path = join(directory(), "runtime.env");
   await runtimeEnvironment({ secretVersions }, path, secretFetcher());
   const contents = readFileSync(path, "utf8");
-  expect(contents).toContain("LLM_API_KEY=SENTINEL_SECRET");
+  const config = loadConfig("/nonexistent", parse(contents));
+  expect(config.apiKey).toBe("SENTINEL_SECRET");
+  expect(config.live.available).toBe(true);
   expect(contents).toContain("DATABASE_PATH=/data/role-cast.sqlite");
   expect(statSync(path).mode & 0o777).toBe(0o600);
   await expect(

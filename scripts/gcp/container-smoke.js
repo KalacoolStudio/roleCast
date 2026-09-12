@@ -24,7 +24,7 @@ function docker(args, { input, allowFailure = false } = {}) {
   return result;
 }
 const env = Object.entries({
-  LLM_API_KEY: "fixture",
+  API_KEY: "fixture",
   LLM_BASE_URL: "https://provider.invalid/v1",
   LLM_MODEL: "fixture",
   HOST: "0.0.0.0",
@@ -115,6 +115,7 @@ try {
   assert.equal(api("/").status, 200);
   assert.match(api("/").text, /<html/i);
   assert.deepEqual(json("/api/runtime"), { deploymentMode: "gcp" });
+  assert.equal(json("/api/capabilities").voice.available, true);
   assert.equal(docker(["exec", name, "id", "-u"]).stdout.trim(), "1000");
   stop();
   // Host recovery helpers run as root; their read-only SQLite checks must not

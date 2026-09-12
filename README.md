@@ -1,8 +1,8 @@
 # Role Cast
 
-本機瀏覽器中的多角色文字演練。選擇內建防詐／面試劇本，或建立自己的 plot，與 Persona 對話，結束後查看逐字稿及附有證據引用的回饋報告。
+本機瀏覽器中的多角色文字與語音演練。選擇內建防詐／面試劇本，或建立自己的 plot，與 Persona 對話，結束後查看逐字稿及附有證據引用的回饋報告。
 
-Mastermind 在通話間安排角色與任務，Judge 評估使用者回答並可停止本通，Reporter 撰寫最終報告；同一 Persona 可再次回撥。背景見 [guidelines](guidelines)，實作範圍見 [文字 MVP 提案](openspec/changes/role-cast-text-mvp/proposal.md)。
+Mastermind 在通話間安排角色與任務，Judge 評估使用者回答並可停止本通，Reporter 撰寫最終報告；同一 Persona 可再次回撥。背景見 [guidelines](guidelines)，目前行為見 [OpenSpec 規格索引](openspec/README.md)。
 
 ## 快速開始
 
@@ -19,7 +19,7 @@ setup 安裝鎖定依賴、準備 `data/`，僅在 `.env` 不存在時從 `.env.
 在根目錄 `.env` 填入三個必填欄位：
 
 ```dotenv
-LLM_API_KEY=填入你的金鑰
+API_KEY=填入你的_OpenAI_金鑰
 LLM_BASE_URL=填入供應商的相容 API 基礎網址
 LLM_MODEL=填入供應商的模型 ID
 LLM_OUTPUT_MODE=auto
@@ -30,6 +30,8 @@ DATABASE_PATH=./data/role-cast.sqlite
 使用 **OpenAI-compatible Chat Completions** 端點。基礎網址應包含供應商要求的版本路徑（例如 `/v1`），不要包含 `/chat/completions`；adapter 會補上該路徑。程序環境變數優先於 `.env`。
 
 `LLM_OUTPUT_MODE` 預設為 `auto`：官方 `api.openai.com` 使用嚴格 JSON Schema，其他端點使用 JSON object 模式。可指定 `json_schema`（模型需支援 Structured Outputs）、`json_object`（僅保證 JSON 語法）或 `text`（供不支援 JSON 模式的相容端點使用）。所有模式都會在後端驗證欄位、型別與證據引用；不符合的結果不會進入演練狀態。不保證相容供應商的私有 API。
+
+`API_KEY` 同時供文字 Agent 與 GPT Live 使用，不需另外設定語音金鑰。舊有僅文字設定仍支援 `LLM_API_KEY`；兩者都有時，以 `API_KEY` 為準。`LLM_BASE_URL` 與 `LLM_MODEL` 繼續設定文字推論。
 
 ```sh
 just dev
@@ -137,13 +139,39 @@ Plot 定義保存在 SQLite。內建 JSON 僅於資料庫缺少對應 ID 時載�
 - 手機採上下排列，輸入時收合舞台並保留角色狀態；可勾選「減少動畫」，也會遵循系統減少動態效果設定。
 - 重新整理或回到背景分頁後，直接還原目前站位，不重播整場。SSE 暫時不可用時顯示「備援連線」並改用輪詢；完全斷線時提示重新連線。
 
-素材位於 `apps/web/public/assets/characters/warm/`，圖格與腳底對齊設定位於 `apps/web/src/stage/sprites.js`。原始 PNG 保留，顯示時裁切影格與混合淺色紙底；目前使用素色區域，未加入辦公室背景。
+角色素材位於 `apps/web/public/assets/characters/warm/`，辦公室背景位於 `apps/web/public/assets/backgrounds/office.png`，圖格與腳底對齊設定位於 `apps/web/src/stage/sprites.js`。舞台依背景比例縮放，原始透明 PNG 圖集會在顯示時裁切成待機與走路影格。
+
+## GPT Live 模組
+
+獨立的 [`@role-cast/gpt-live`](packages/gpt-live/README.md) 提供 `gpt-live-1` 的 WebSocket 音訊、WebRTC SDP 交換與 sideband 控制。目前介面已透過後端音訊 relay 整合此模組，角色設定及金鑰留在伺服器。
+
+語音直接使用根目錄 `.env` 的既有 `API_KEY`，不需 `OPENAI_API_KEY`。以下兩項可依需要調整：
+
+```dotenv
+OPENAI_BASE_URL=https://api.openai.com/v1
+LIVE_VOICE=marin
+```
+
+`OPENAI_BASE_URL` 和 `LIVE_VOICE` 可省略，預設如上。語音模型固定為 `gpt-live-1`，client delegation，`store: false`。規劃、Judge、角色協助與報告共用 `API_KEY`，仍使用 `LLM_BASE_URL` 和 `LLM_MODEL`。只設定舊有 `LLM_API_KEY` 時可繼續文字演練，語音會停用；無效的選填語音設定也只停用語音。顯示可開啟語音代表本機設定有效，不代表已驗證帳號或模型權限。修改後端或 `.env` 後需重新啟動。
+
+1. 按「用語音接通」，或等文字回覆完成後在「寫下你的回覆…」旁按「開啟語音」。瀏覽器先取得麥克風權限，之後才建立付費模型連線。
+2. 開場後直接說話，音訊與逐字稿自動傳送及保存，不需按「送出」。對方說話時也可插話。
+3. 「麥克風靜音」暫停收音，對方音訊仍可播放；「改用文字」釋放麥克風並保留同一通對話。等待最後的 Judge 檢查及連線清理完成後即可輸入文字。
+4. 「掛斷本通」及「結束整場演練」隨時可用。重新整理或離開頁面會停止語音，返回時須再次手動開啟，不自動續接。
+
+語音模式下 Judge 每秒取得新增逐字片段，逐次檢查累積證據；檢查期間音訊繼續播放，符合停止條件時立即清空後續播放。這與文字模式等待 Judge 後才顯示回覆的時序不同。每通語音累計預設 **180 秒**，靜音及重新開啟語音均不重設時間；語音片段不計入 12 個文字回合上限。內建劇本預設全場最多 3 通；劇本工作室可調整文字回合、通話與每通語音秒數上限，新演練會保存當時設定。
+
+逐字片段可能不完整或延遲，生成文字不代表使用者已聽完整句。歷史標示辨識／播放不確定性；「檢視評估引用片段」與報告引用可查看固定的原始評估文字。往上捲動閱讀時，新字幕不會強制跳回最下方。
+
+語音需要支援 AudioWorklet 的瀏覽器及 localhost（或安全來源）。若權限被拒絕、裝置不可用、音訊暫停、模型連線中斷或音訊緩衝超限，介面會說明原因並提供文字回覆或手動重開語音。建議使用耳機。開發代理同時支援 HTTP 與 WebSocket。
+
+未安裝 just 時可執行 `npm run dev`；正式模式用 `npm run build` 後執行 `npm start`。自動驗證用 `npm run build`、`npm test` 及 `npm run check`。
 
 ## 資料與金鑰
 
 `.env` 僅由後端讀取，金鑰不送至瀏覽器、不寫入資料庫或日誌。`.env` 與 `data/` 已由 Git 忽略；請勿在 `VITE_` 開頭的設定放入秘密。
 
-本機模式的逐字稿、角色與報告保存在本機 SQLite；GCP 模式使用雲端持久磁碟，並與授權使用者共用。**推論所需對話與背景會送至你設定的外部 LLM API**。這不是離線模型；資料保存方式也受供應商政策影響。防詐操作都是文字情境，沒有真實轉帳或電話連線。
+本機模式的逐字稿、角色與報告保存在本機 SQLite；GCP 模式使用雲端持久磁碟，並與授權使用者共用。**推論所需對話與背景會送至你設定的外部 LLM API**。這不是離線模型；資料保存方式也受供應商政策影響。語音音訊會送往 OpenAI Live；應用程式保存逐字片段與證據，不保存原始音訊，且預設關閉供應商錄製（`store: false`）。防詐操作是模擬情境，沒有真實轉帳或撥打電話。
 
 瀏覽器重新整理會還原同一場。後端重新啟動時，未結束演練標為「已中斷」並保留已接受訊息，不自動重送請求、續接舊通話或補造報告。請開始新演練。不要同時啟動兩個後端使用同一資料庫。
 
@@ -153,14 +181,15 @@ Plot 定義保存在 SQLite。內建 JSON 僅於資料庫缺少對應 ID 時載�
 - `POST /api/plots`：建立定義；`PUT /api/plots/:id`：提交完整定義及目前 `version`，成功回傳新版本；過期版本回傳 409。
 - `POST /api/drills`：`{ "plotId": "...", "background": "..." }`；`GET /api/drills` 與 `/api/drills/:id`：歷史與演練快照。
 - 通話操作：`POST /api/drills/:id/calls/accept`、`/calls/:callId/messages`、`/calls/:callId/hangup`、`/finish`；報告：`GET /api/drills/:id/report`。
+- 語音：接通可指定 `{ "assignmentId": "...", "mode": "voice" }`；`POST /api/drills/:id/calls/:callId/voice` 保留連線，WebSocket `/api/drills/:id/calls/:callId/voice/:voiceId` 以一次性 token 附加。舊 sessions 路徑亦支援相同操作。
 - `GET /api/drills/:id` 的 `stage` 含公開 revision、事件 watermark 與 Persona 外觀映射；原回應欄位保留。
 - `GET /api/drills/:id/events?after=0&limit=100`：有序公開事件，limit 上限 500，回傳 nextCursor／hasMore／latestSequence；非法游標 400、超前游標 409、未知 drill 404。
 - `GET /api/drills/:id/events/stream?after=N`：SSE 的 stage 事件含 sequence 作為 id，snapshot 訊息提供公開快照；重新連線的 Last-Event-ID 優先。先讀快照、再從 watermark 訂閱可避免重播歷史。
 - 舊 `/api/scenarios`、`/api/sessions` 仍接受舊欄位並回傳相容投影。Drill API 不含私有 prompts 或固定事實，作者 API 會提供完整 plot；這是單一本機工作空間，沒有作者／受測者帳號隔離。
 
-首次啟動會將 SQLite 從 v1／v2 升級至 **v3**，新增舞台事件與固定外觀映射，保留舊 ID、逐字稿、報告與保存的 operation prompts。舊紀錄不補造歷史事件；服務重啟中斷進行中的 drill 時，會保存本次中斷事件。
+首次啟動會將 SQLite 升級至 **v4**，同時支援劇本、舞台與語音證據。可從文字 v1、劇本 v2、舞台 v3，以及語音分支曾使用的 v2 升級；遷移會辨識既有資料表並在同一交易內完成，保留舊 ID、逐字稿、報告、已編輯劇本、operation prompts、事件順序與語音片段。舊紀錄不補造歷史事件；服務重啟會封存待處理的語音文字，並將進行中的 drill 標為中斷且只保存一次中斷事件。
 
-升級前先停止後端並備份整個 `data/`（若自訂 DATABASE_PATH，備份該資料庫與相關檔案）。若需回退舊程式，請停止服務後還原升級前備份；舊程式不能直接開啟 v3，也不能只改小 user_version。回復備份會失去備份之後新增的紀錄。
+升級前先停止後端並備份整個 `data/`（若自訂 DATABASE_PATH，備份該資料庫與相關檔案）。若需回退舊程式，請停止服務後還原升級前備份；舊程式不能直接開啟 v4，也不能只改小 user_version。回復備份會失去備份之後新增的紀錄。
 
 ## 驗證與故障排除
 
@@ -193,6 +222,10 @@ just check
 離線測試不建立公開 tunnel，也不呼叫真實付費模型；透過分享網址實際開始演練會使用所配置的模型。
 
 ### 真實模型 smoke checklist
+
+語音自動化涵蓋 24/44.1/48 kHz 合成音訊、實際 AudioWorklet、回環 WebSocket／Vite 代理、權限失敗、靜音、同時收放音、模式切換、停止、報告引用及資料庫遷移／復原。這些測試沒有驗證真實麥克風或付費 Live 帳號。
+
+語音人工檢查項目：確認帳號可建立 `gpt-live-1`；用實際麥克風說繁體中文並核對辨識；在對方說話時插話；比較耳機與喇叭回音；觀察開場／回覆延遲、口音與音量；確認切換文字、失去網路及掛斷後裝置指示燈關閉；核對部分逐字稿與報告引用。請另記錄裝置、瀏覽器、網路、使用秒數與失敗情形。
 
 自動化測試證明流程及資料契約，不代表真實模型品質。配置自己的 API 後，可人工檢查：
 

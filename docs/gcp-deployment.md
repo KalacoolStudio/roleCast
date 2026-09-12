@@ -91,6 +91,8 @@ done
 
 The base URL is an OpenAI-compatible Chat Completions API base, usually ending in `/v1`, without `/chat/completions`. Values must be single-line. Record each numeric version returned and set `secret_versions` accordingly; defaults are all `"1"`. If references change, apply Terraform and restart the VM before the next release. Never use the mutable `latest` alias. Keep prior versions enabled while their releases may be rolled back to.
 
+The `rolecast-llm-api-key` secret supplies the application's shared `API_KEY` for text and GPT Live voice. The deployed voice client uses the default OpenAI endpoint and voice from current main; use a key with the required OpenAI access. The secret resource name remains stable for existing installations.
+
 Each app start fetches the release's pinned versions through VM identity into `/run/rolecast/runtime.env`, mode 0600. That volatile file is removed on service stop. Credential contents are excluded from application logs, frontend assets, GitHub artifacts and Terraform state. Trusted VM administrators can access runtime credentials and are therefore privileged users.
 
 ## Configure GitHub and deploy
@@ -170,7 +172,7 @@ sudo /bin/bash /var/lib/rolecast/host.sh rollback
 sudo /bin/bash /var/lib/rolecast/host.sh status
 ```
 
-Schema compatibility is read directly without running migrations or engine recovery. The integrated plot editor and live drill stage use schema **3**. Future migrations must update the storage schema constant; the image helper imports it. An older incompatible image is refused, leaving data and transaction evidence intact. Use a corrected forward release, or deliberately select a matching backup and image for restoration. A reboot during a release returns to the last verified compatible release; an interrupted data restore requires operator review before any application starts.
+Schema compatibility is read directly without running migrations or engine recovery. The integrated plot editor, live drill stage and voice evidence use schema **4**. Future migrations must update the storage schema constant; the image helper imports it. An older incompatible image is refused, leaving data and transaction evidence intact. Use a corrected forward release, or deliberately select a matching backup and image for restoration. A reboot during a release returns to the last verified compatible release; an interrupted data restore requires operator review before any application starts.
 
 ## Explicit data restore
 

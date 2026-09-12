@@ -10,6 +10,7 @@ try {
   store.recover();
   const app = await createApp(new Engine(store, new Agents(config)), {
     deploymentMode: config.deploymentMode,
+    voice: config.live,
   });
   await app.listen({ port: config.port, host: config.host });
   console.log(`Role Cast listening on ${config.host}:${config.port}`);

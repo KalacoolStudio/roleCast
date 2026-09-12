@@ -23,7 +23,7 @@ Role Cast currently runs only on a developer's machine. Merging a change into `m
 
 ### Modified Capabilities
 
-None in the canonical spec tree, which currently contains only `.gitkeep`. The completed but unarchived `role-cast-text-mvp` change defines the local runtime; this change explicitly adds a cloud mode while retaining those requirements for local execution. Its local-only deployment assumptions and data-location wording must be reconciled when the changes are eventually archived.
+- `local-runtime`: Scope the storage disclosure to local versus GCP mode, preserving secret isolation and local defaults. Main has consolidated the text, plots, stage and voice requirements into canonical specs; this change builds on that baseline without rewriting archived changes.
 
 ## Impact
 
@@ -33,4 +33,4 @@ GCP billing and an initial administrator-run bootstrap are required before autom
 
 ## Non-Goals
 
-Public sign-up, per-user histories, parallel independent exercises, a PostgreSQL migration, autoscaling, zero-downtime deployment, voice features, a custom domain, and changes to the other worktree's ongoing GPT Live work.
+Public sign-up, per-user histories, parallel independent exercises, a PostgreSQL migration, autoscaling, zero-downtime deployment, new voice features, a custom domain, and changes to the other worktree's ongoing GPT Live work.

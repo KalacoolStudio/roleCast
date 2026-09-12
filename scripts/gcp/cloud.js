@@ -58,6 +58,9 @@ export async function runtimeEnvironment(config, destination, fetcher = fetch) {
       throw new Error(`Invalid secret contents: ${name}`);
     values[name] = value;
   }
+  // Current main shares this approved key between text and GPT Live.
+  values.API_KEY = values.LLM_API_KEY;
+  delete values.LLM_API_KEY;
   loadConfig("/nonexistent", values);
   const temporary = `${destination}.${randomUUID()}.tmp`;
   try {
