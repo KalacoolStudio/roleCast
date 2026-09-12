@@ -77,12 +77,17 @@ function fixture({ existing = true } = {}) {
     COMMIT: commit,
     GENERATION: "2",
   };
-  const command = (code, extra = {}) =>
-    spawnSync("bash", ["-c", adapters + "\n" + code], {
+  const command = (code, extra = {}) => {
+    const result = spawnSync("bash", ["-c", adapters + "\n" + code], {
       env: { ...env, ...extra },
       encoding: "utf8",
-      timeout: 5000,
+      // Leave room for cold process/filesystem startup on shared CI runners,
+      // while staying within Vitest's 10-second test budget.
+      timeout: 8000,
     });
+    if (result.error) throw result.error;
+    return result;
+  };
   return {
     root,
     data,

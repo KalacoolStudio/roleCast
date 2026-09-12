@@ -18,3 +18,8 @@ secret_versions = {
   LLM_BASE_URL = "1"
   LLM_MODEL    = "1"
 }
+
+# Optional Google-hosted HTTPS endpoint; start restricted before selecting access.
+https_gateway_enabled = false
+https_gateway_access = "restricted" # restricted | iap | anonymous
+https_gateway_min_instances = 0

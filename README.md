@@ -68,6 +68,8 @@ just start
 
 依 [GCP 部署指南](docs/gcp-deployment.md) 完成一次性的 Terraform、Secret Manager 與 GitHub `production` environment 設定後，合併至 `main` 會自動驗證、建置並部署前端與 API。SQLite 使用獨立持久磁碟，備份保存在私有 Cloud Storage；不會上傳開發者的 `.env` 或本機資料。
 
+可啟用 [公開 HTTPS gateway](docs/gcp-deployment.md#public-https-gateway)，取得 Google 提供的 `https://…run.app` 網址，直接在瀏覽器使用，不需本機 tunnel。入口可設定為指定 Google 帳號登入或匿名存取；匿名使用者仍會消耗專案的模型額度。前端、API、SSE 與語音共用同一 HTTPS 網址，SQLite 保留在原本的 VM 持久磁碟。
+
 透過 Google IAP tunnel 使用雲端版時，每個瀏覽器會自動取得一個不可猜測、HttpOnly 的私人工作區憑證。劇本、演練、報告、事件串流與語音操作都由後端依工作區隔離；每個工作區可以各自進行一場演練，不會阻擋其他工作區。IAP 負責限制哪些 Google 帳號可以連入，瀏覽器工作區則負責應用程式內的資料隔離。部署或重啟會中斷所有進行中的演練並保留既有紀錄。
 
 本機 `.env` 預設 `HOST=127.0.0.1`、`DEPLOYMENT_MODE=local`；本機指令不需要 GCP 設定。
