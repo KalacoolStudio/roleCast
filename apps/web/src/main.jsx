@@ -1,9 +1,11 @@
 import { DrillStage } from "./stage/DrillStage.jsx";
 import { connectDrill } from "./stage/feed.js";
 import { PlotEditor } from "./PlotEditor.jsx";
+import { Home, CastMark } from "./Home.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import "./home.css";
 import { useVoice } from "./use-voice.js";
 import { Conversation } from "./conversation.jsx";
 
@@ -243,11 +245,9 @@ function App() {
             select("");
           }}
         >
-          <span className="brand-mark">
-            R<span>·</span>
-          </span>
+          <CastMark />
           <span>
-            ROLE CAST<small>對話演練室</small>
+            RoleCast<small>劇本大廳</small>
           </span>
         </a>
         <button
@@ -316,7 +316,7 @@ function App() {
                 ? "演練現場 · DRILL"
                 : "劇本練習 · PLOT"}
           </span>
-          <span className="badge">ROLE PLAY</span>
+          <span className="topbar-note">Adaptive role orchestration</span>
         </header>
         {error && (
           <div className="error" role="alert">
@@ -340,96 +340,17 @@ function App() {
             }}
           />
         ) : !id ? (
-          <div className="home">
-            <div className="eyebrow">
-              <span /> PRACTICE MAKES PROGRESS
-            </div>
-            <h1>
-              把重要的對話，
-              <br />
-              <em>先練習一次。</em>
-            </h1>
-            <p className="intro">
-              走進情境，與不同角色對話。
-              <br />
-              在安全的練習空間裡，找到自己的節奏。
-            </p>
-            <div className="plot-heading">
-              <h2>選擇今天的練習</h2>
-              <span>01 — SELECT A PLOT</span>
-            </div>
-            <p className="hint">
-              每個 plot 是一份劇本；每次開始會建立新的 drill。
-            </p>
-            <div className="plot-grid">
-              {plots.map((s, index) => (
-                <button
-                  className={`plot-card ${plotId === s.id ? "chosen" : ""}`}
-                  key={s.id}
-                  onClick={() => setPlotId(s.id)}
-                  aria-pressed={plotId === s.id}
-                >
-                  <div className="card-top">
-                    <span className="card-icon">{index === 0 ? "◎" : "↗"}</span>
-                    <span className="category">{s.category}</span>
-                    <span className="radio" />
-                  </div>
-                  <h3>{s.name}</h3>
-                  <p>{s.description}</p>
-                  <div className="card-bottom">
-                    <span>{s.duration}</span>
-                    <span>文字 / 語音互動</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className="setup">
-              <div>
-                <label htmlFor="background">
-                  讓練習更貼近你 <span>選填</span>
-                </label>
-                <p>簡單說說你的經驗，或這次想加強的地方。</p>
-              </div>
-              <textarea
-                id="background"
-                value={background}
-                onChange={(e) => setBackground(e.target.value)}
-                placeholder="例如：第一次準備後端工程師面試，想練習架構取捨…"
-                maxLength={2000}
-              />
-            </div>
-            <div className="start-row">
-              <p className="privacy">
-                紀錄保存在本機。演練內容會送至你設定的外部 LLM API 進行推論。
-              </p>
-              <button
-                className="primary"
-                onClick={start}
-                disabled={acting || !plots.length || !!activeId}
-              >
-                {acting ? "正在開始…" : "開始演練"} <span>↗</span>
-              </button>
-            </div>
-            {activeId && (
-              <p className="hint">
-                目前已有進行中的演練，請從左側繼續或先結束該場。
-              </p>
-            )}
-            <div className="how">
-              <span>你的練習路徑</span>
-              <p>
-                <b>01</b> 進入情境
-              </p>
-              <i>→</i>
-              <p>
-                <b>02</b> 展開對話
-              </p>
-              <i>→</i>
-              <p>
-                <b>03</b> 回看與成長
-              </p>
-            </div>
-          </div>
+          <Home
+            plots={plots}
+            plotId={plotId}
+            onSelect={setPlotId}
+            background={background}
+            onBackground={setBackground}
+            onStart={start}
+            acting={acting}
+            activeId={activeId}
+            onResume={select}
+          />
         ) : !drill ? (
           <div className="loading" role="status">
             正在取得演練紀錄…
@@ -726,7 +647,7 @@ function App() {
           </div>
         )}
         <footer>
-          ROLE CAST <span>每一次對話，都是一次練習。</span>
+          RoleCast <span>每一次對話，都是一次練習。</span>
         </footer>
       </main>
     </div>

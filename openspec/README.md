@@ -5,12 +5,12 @@ The specifications under `specs/` describe the current combined application. Com
 | Capability | Current contract |
 | --- | --- |
 | [simulation-lifecycle](specs/simulation-lifecycle/spec.md) | Plot selection, drill snapshots, Persona identity, planning, and call boundaries |
-| [text-training-ui](specs/text-training-ui/spec.md) | Text interaction, history, refresh, and duplicate submission safety |
+| [text-training-ui](specs/text-training-ui/spec.md) | Prototype styling, illustrated plot selection, responsive controls, text interaction, history, and refresh safety |
 | [evaluation-reporting](specs/evaluation-reporting/spec.md) | Independent Judge decisions, one Recap per call, and evidence-based Reporter output |
 | [local-runtime](specs/local-runtime/spec.md) | Shared credentials, model output contracts, local persistence, migrations, and project commands |
 | [plot-authoring](specs/plot-authoring/spec.md) | Plot editing, import/export, role guidance, and immutable drill configuration |
 | [drill-stage-events](specs/drill-stage-events/spec.md) | Ordered events, snapshot revisions, SSE, recovery, and privacy |
-| [drill-stage-presentation](specs/drill-stage-presentation/spec.md) | Role movements, current state, accessibility, and responsive layout |
+| [drill-stage-presentation](specs/drill-stage-presentation/spec.md) | Illustrated office workspace, role movements, current state, accessibility, and responsive layout |
 | [gpt-live-client](specs/gpt-live-client/spec.md) | Reusable server-side Live wrapper, media, delegation, and lifecycle |
 | [voice-conversation](specs/voice-conversation/spec.md) | Hands-free audio, controls, ownership, text fallback, and usage limits |
 | [voice-evidence](specs/voice-evidence/spec.md) | Transcript provenance, automatic checkpoints, continuous evaluation, and recovery |
@@ -27,5 +27,9 @@ Completed changes, in implementation order:
 - [drill-live-stage](changes/archive/2026-09-12-drill-live-stage/)
 - [add-gpt-live-wrapper](changes/archive/2026-09-12-add-gpt-live-wrapper/)
 - [add-live-voice-conversation](changes/archive/2026-09-12-add-live-voice-conversation/), including [main integration validation](changes/archive/2026-09-12-add-live-voice-conversation/validation.md)
+
+Active changes with published specs already synchronized:
+
+- [align-website-prototype-style](changes/align-website-prototype-style/) — retrospective proposal, design, completed tasks, and validation for the orange/cream theme and bundled scene previews. Also corrects the existing office-stage background description. The local `PORT=3001` fix is recorded as configuration evidence; the application default remains 3000. Implementation is complete; the change remains active for review and later archive.
 
 Run `openspec validate --all --strict` to validate current specs and active changes, or `openspec list` to inspect pending work.
