@@ -132,6 +132,8 @@ export class VoiceCoordinator {
       client,
       reservationMs = 30000,
       checkpointMs = 1000,
+      judgeSettleMs = 750,
+      judgeMaxWaitMs = 3000,
       ownerTimeoutMs = 15000,
       closeMs = 15000,
       jobMs = 65000,
@@ -146,6 +148,8 @@ export class VoiceCoordinator {
     this.limits = {
       reservationMs,
       checkpointMs,
+      judgeSettleMs,
+      judgeMaxWaitMs,
       ownerTimeoutMs,
       closeMs,
       jobMs,
@@ -172,6 +176,7 @@ export class VoiceCoordinator {
   observeUserMessage(sessionId, callId, message, ownerId = defaultWorkspaceId) {
     const item = this.itemFor(sessionId, callId, ownerId);
     if (!item || item.frozen || !this.current(item)) return false;
+    item.latestUser = Math.max(item.latestUser, message.sequence);
     item.pendingUser = Math.max(item.pendingUser, message.sequence);
     this.send(item, { type: "checkpoint", messages: [message] });
     this.judge(item);
@@ -262,6 +267,9 @@ export class VoiceCoordinator {
       assistAbort: new AbortController(),
       pendingUser: 0,
       checkedUser: 0,
+      latestUser: 0,
+      judgeSettle: null,
+      judgeMaximum: null,
       delegationIds: new Set(),
       assistance: [],
     };
@@ -485,7 +493,14 @@ export class VoiceCoordinator {
       ].includes(event.type)
     ) {
       const fragment = this.records.ingest(item.sessionId, item.id, event);
-      if (fragment) this.send(item, { type: "caption", fragment });
+      if (fragment) {
+        this.send(item, { type: "caption", fragment });
+        if (
+          fragment.speaker === "user" &&
+          !this.tryImmediateConversationClosure(item)
+        )
+          this.scheduleJudge(item);
+      }
     } else if (event.type === "session.output_audio.delta") {
       const bytes = decodeAudio(event.delta);
       if (item.status === "starting") {
@@ -536,9 +551,58 @@ export class VoiceCoordinator {
       this.send(item, { type: "checkpoint", messages });
     for (const m of messages)
       if (m.speaker === "user")
-        item.pendingUser = Math.max(item.pendingUser, m.sequence);
-    if (!final) this.judge(item);
+        item.latestUser = Math.max(item.latestUser, m.sequence);
     return messages;
+  }
+  tryImmediateConversationClosure(item) {
+    const pendingUser = this.records
+      .fragments(item.sessionId, item.id, true)
+      .filter((fragment) => fragment.speaker === "user")
+      .map((fragment) => fragment.delta)
+      .join("");
+    const normalized = normalizeClosingSpeech(pendingUser);
+    if (
+      !participantEndedCall(normalized) &&
+      !closingAcknowledgement(normalized)
+    )
+      return false;
+    this.checkpoint(item);
+    item.pendingUser = Math.max(item.pendingUser, item.latestUser);
+    return this.closeOnConversationClosure(item);
+  }
+  clearJudgeSchedule(item) {
+    clearTimeout(item.judgeSettle);
+    clearTimeout(item.judgeMaximum);
+    item.judgeSettle = null;
+    item.judgeMaximum = null;
+  }
+  scheduleJudge(item) {
+    if (item.frozen || !this.current(item)) return;
+    clearTimeout(item.judgeSettle);
+    item.judgeSettle = setTimeout(
+      () => this.runScheduledJudge(item),
+      this.limits.judgeSettleMs,
+    );
+    if (item.judgeMaximum === null)
+      item.judgeMaximum = setTimeout(
+        () => this.runScheduledJudge(item),
+        this.limits.judgeMaxWaitMs,
+      );
+  }
+  runScheduledJudge(item) {
+    this.clearJudgeSchedule(item);
+    if (item.frozen || !this.current(item)) return;
+    try {
+      this.checkpoint(item);
+      item.pendingUser = Math.max(item.pendingUser, item.latestUser);
+      this.judge(item);
+    } catch {
+      this.engine.fail(
+        item.sessionId,
+        voiceError("VOICE_EVALUATION"),
+        item.ownerId,
+      );
+    }
   }
   closeOnConversationClosure(item) {
     if (item.pendingUser <= item.checkedUser) return false;
@@ -691,6 +755,7 @@ export class VoiceCoordinator {
   seal(sessionId, callId, ownerId = defaultWorkspaceId) {
     const item = this.itemFor(sessionId, callId, ownerId);
     if (!item || item.frozen) return;
+    this.clearJudgeSchedule(item);
     item.frozen = true;
     item.sealedAt = Date.now();
     item.status = "stopping";
@@ -701,6 +766,7 @@ export class VoiceCoordinator {
     item.assistAbort.abort();
     item.startup.abort();
     this.checkpoint(item, true);
+    item.pendingUser = Math.max(item.pendingUser, item.latestUser);
     this.records.update(sessionId, item.id, { status: "stopping" });
   }
   callEnded(sessionId, callId, ownerId = defaultWorkspaceId) {

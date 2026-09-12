@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   conversationClosure,
@@ -8,6 +8,7 @@ import { harness, ready, until, deferred } from "./support/fixtures.js";
 import { fakeLive, fakeSocket, transcript } from "./support/voice.js";
 const cleanup = [];
 afterEach(async () => {
+  vi.useRealTimers();
   for (const fn of cleanup.splice(0).reverse()) await fn();
 });
 const keep = {
@@ -64,6 +65,8 @@ async function setup({ agents, provider, limits, voiceFirst = false } = {}) {
   const media = new VoiceCoordinator(h.engine, {
     client,
     checkpointMs: 10000,
+    judgeSettleMs: 5,
+    judgeMaxWaitMs: 20,
     closeMs: 40,
     jobMs: 200,
     ...limits,
@@ -129,6 +132,76 @@ it("voice-first skips text generation, starts one greeting after readiness, and 
   const second = await h.attach();
   expect(second.connection.instructions).toHaveLength(0);
 });
+it("persists periodic checkpoints but waits for stable user evidence before judging", async () => {
+  const contexts = [];
+  const h = await setup({
+    agents: {
+      watch: (context) => {
+        contexts.push(context);
+        return keep;
+      },
+    },
+    limits: {
+      checkpointMs: 10,
+      judgeSettleMs: 50,
+      judgeMaxWaitMs: 120,
+    },
+  });
+  vi.useFakeTimers();
+  const attached = h.attach();
+  await vi.advanceTimersByTimeAsync(10);
+  const { item, connection } = await attached;
+
+  connection.emit(transcript("我會先查", "user", 0));
+  await vi.advanceTimersByTimeAsync(49);
+  expect(
+    h.store.get(h.id).messages.some((message) => message.text === "我會先查"),
+  ).toBe(true);
+  expect(contexts).toHaveLength(0);
+
+  await vi.advanceTimersByTimeAsync(1);
+  expect(contexts).toHaveLength(1);
+  expect(contexts[0].voiceEvidence).toContain("部分逐字稿");
+  await h.media.stop(item);
+});
+it("judges continuous user transcript within the maximum wait", async () => {
+  const contexts = [];
+  const h = await setup({
+    agents: {
+      watch: (context) => {
+        contexts.push(context);
+        return keep;
+      },
+    },
+    limits: {
+      checkpointMs: 10,
+      judgeSettleMs: 50,
+      judgeMaxWaitMs: 120,
+    },
+  });
+  vi.useFakeTimers();
+  const attached = h.attach();
+  await vi.advanceTimersByTimeAsync(10);
+  const { item, connection } = await attached;
+
+  connection.emit(transcript("第一段", "user", 0));
+  await vi.advanceTimersByTimeAsync(40);
+  connection.emit(transcript("第二段", "user", 40));
+  await vi.advanceTimersByTimeAsync(40);
+  connection.emit(transcript("第三段", "user", 80));
+  await vi.advanceTimersByTimeAsync(39);
+  expect(contexts).toHaveLength(0);
+
+  await vi.advanceTimersByTimeAsync(1);
+  expect(contexts).toHaveLength(1);
+  expect(
+    contexts[0].messages
+      .filter((message) => message.speaker === "user")
+      .map((message) => message.text)
+      .join(""),
+  ).toBe("第一段第二段第三段");
+  await h.media.stop(item);
+});
 it("coalesces new evidence behind a running Judge without blocking audio or starving its result", async () => {
   const first = deferred(),
     calls = [];
@@ -186,7 +259,6 @@ it("ends a voice call after a mutual farewell without requiring a scoring criter
   await until(() => h.agents.calls.some((call) => call.kind === "watch"));
   connection.emit(transcript("好，那先這樣，感謝您的來電。", "persona", 80));
   connection.emit(transcript("拜拜", "user", 160));
-  h.media.checkpoint(item);
   await until(() => !!h.store.get(h.id).calls[0].endedAt);
   await item.stopping;
   const state = h.store.get(h.id);
@@ -214,6 +286,7 @@ it("sends a completed ATM action to the active Judge immediately and only deduct
         return keep;
       },
     },
+    limits: { judgeSettleMs: 10000, judgeMaxWaitMs: 20000 },
   });
   await h.attach();
   const first = h.engine.atmAction(
@@ -270,6 +343,57 @@ it("returning to text drains the final Judge and ignores provider text beyond th
     finalized: true,
     usage: { seconds: 1.25 },
   });
+});
+it("stop clears pending Judge timers and drains final evidence exactly once", async () => {
+  const contexts = [];
+  const h = await setup({
+    agents: {
+      watch: (context) => {
+        contexts.push(context);
+        return keep;
+      },
+    },
+    limits: { judgeSettleMs: 50, judgeMaxWaitMs: 100 },
+  });
+  const { item, connection } = await h.attach();
+  vi.useFakeTimers();
+  connection.emit(transcript("最後證據", "user"));
+
+  await h.media.stop(item);
+  expect(item.judgeSettle).toBeNull();
+  expect(item.judgeMaximum).toBeNull();
+  expect(contexts).toHaveLength(1);
+  expect(
+    h.store
+      .get(h.id)
+      .messages.filter(
+        (message) => message.source === "voice" && message.speaker === "user",
+      ),
+  ).toHaveLength(1);
+
+  await vi.advanceTimersByTimeAsync(200);
+  expect(contexts).toHaveLength(1);
+});
+it("dispose clears pending Judge timers without starting obsolete evaluation", async () => {
+  const contexts = [];
+  const h = await setup({
+    agents: {
+      watch: (context) => {
+        contexts.push(context);
+        return keep;
+      },
+    },
+    limits: { judgeSettleMs: 50, judgeMaxWaitMs: 100 },
+  });
+  const { item, connection } = await h.attach();
+  vi.useFakeTimers();
+  connection.emit(transcript("關閉前收到", "user"));
+
+  await h.media.dispose();
+  expect(item.judgeSettle).toBeNull();
+  expect(item.judgeMaximum).toBeNull();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(contexts).toHaveLength(0);
 });
 it.each(["invalid", "timeout"])(
   "required Judge %s fails the exercise with sealed evidence",
