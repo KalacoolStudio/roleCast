@@ -7,15 +7,16 @@ import {
   terminal,
   validateResult,
 } from "./contracts.js";
-import { prompts, roleContext } from "./agents.js";
-import { scenarios as defaults, publicScenario } from "./scenarios.js";
+import { effectivePrompts, roleContext } from "./agents.js";
+import { builtInPlots as defaults } from "./plots.js";
+import { publicPlot } from "./plot-contracts.js";
 
 const now = () => new Date().toISOString();
 export class Engine {
-  constructor(store, agents, scenarios = defaults) {
+  constructor(store, agents, plots = defaults) {
     this.store = store;
     this.agents = agents;
-    this.scenarios = scenarios;
+    this.store.seedPlots(plots);
     this.jobs = new Map();
     this.pending = new Set();
     this.disposed = false;
@@ -77,17 +78,16 @@ export class Engine {
     );
     return validateResult(kind, result, context);
   }
-  start(scenarioId, background = "") {
-    const scenario = this.scenarios.find((v) => v.id === scenarioId);
-    if (!scenario) throw new AppError("INVALID_SCENARIO", "請選擇有效情境。");
+  start(plotId, background = "") {
+    const plot = this.store.getPlot(plotId);
     const s = {
       id: randomUUID(),
       state: "planning",
       version: 0,
       createdAt: now(),
       updatedAt: now(),
-      scenario: structuredClone(scenario),
-      prompts: { ...prompts },
+      plot: structuredClone(plot),
+      prompts: effectivePrompts(plot),
       background: inputText(background, 2000, true),
       busy: false,
       finishRequested: false,
@@ -107,7 +107,7 @@ export class Engine {
     return s.id;
   }
   plan(s) {
-    if (s.finishRequested || s.calls.length >= s.scenario.maxCalls) {
+    if (s.finishRequested || s.calls.length >= s.plot.maxCalls) {
       this.report(s);
       return;
     }
@@ -128,7 +128,7 @@ export class Engine {
         goal: result.goal,
         allowedFactIds: result.allowedFactIds,
         sharedMessageIds: result.sharedMessageIds,
-        facts: latest.scenario.facts.filter((f) =>
+        facts: latest.plot.facts.filter((f) =>
           result.allowedFactIds.includes(f.id),
         ),
       };
@@ -236,10 +236,7 @@ export class Engine {
       const turnCount = latest.messages.filter(
         (m) => m.callId === callId && m.speaker === "user",
       ).length;
-      if (
-        reply.requestHangup ||
-        turnCount >= latest.scenario.maxUserTurnsPerCall
-      )
+      if (reply.requestHangup || turnCount >= latest.plot.maxUserTurnsPerCall)
         this.closeCall(
           id,
           callId,
@@ -300,7 +297,7 @@ export class Engine {
       id: s.id,
       state: s.state,
       createdAt: s.createdAt,
-      scenario: publicScenario(s.scenario),
+      plot: publicPlot(s.plot),
       busy: s.busy,
       error: s.error,
       finishRequested: s.finishRequested,
@@ -333,7 +330,7 @@ export class Engine {
       id: s.id,
       state: s.state,
       createdAt: s.createdAt,
-      scenario: publicScenario(s.scenario),
+      plot: publicPlot(s.plot),
     }));
   }
   dispose() {

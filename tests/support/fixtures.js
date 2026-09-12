@@ -20,7 +20,7 @@ export function fixtureAgents(overrides = {}, ms = 0) {
           return { action: "finish" };
         const assignment = {
           goal: "練習提出清楚的理由。",
-          allowedFactIds: context.scenario.facts.map((f) => f.id),
+          allowedFactIds: context.plot.facts.map((f) => f.id),
           sharedMessageIds: [],
         };
         if (context.calls.length === 1)
@@ -34,8 +34,7 @@ export function fixtureAgents(overrides = {}, ms = 0) {
           persona: {
             id: `persona-${context.calls.length}`,
             name: context.calls.length ? "陳主管" : "林小姐",
-            role:
-              context.scenario.id === "interview" ? "技術面試官" : "購物客服",
+            role: context.plot.id === "interview" ? "技術面試官" : "購物客服",
             personality: "冷靜、有禮",
           },
           ...assignment,
@@ -87,10 +86,10 @@ export function fixtureAgents(overrides = {}, ms = 0) {
     },
   };
 }
-export function harness(overrides = {}, path = ":memory:", scenarios) {
+export function harness(overrides = {}, path = ":memory:", plots) {
   const store = new Store(path);
   const agents = fixtureAgents(overrides);
-  const engine = new Engine(store, agents, scenarios);
+  const engine = new Engine(store, agents, plots);
   return {
     store,
     agents,
@@ -109,8 +108,8 @@ export async function until(fn, timeout = 3000) {
     await delay(2);
   }
 }
-export async function ready(h, scenario = "anti-fraud") {
-  const id = h.engine.start(scenario);
+export async function ready(h, plot = "anti-fraud") {
+  const id = h.engine.start(plot);
   await until(() => h.store.get(id).state === "awaiting_call");
   const callId = h.engine.accept(id, h.store.get(id).pendingAssignmentId);
   await until(() => !h.store.get(id).busy);

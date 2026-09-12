@@ -118,7 +118,7 @@ export function validateResult(kind, value, context) {
   const messages = context.messages || [];
   validateReferences(result, new Set(messages.map((m) => m.id)));
   if (kind === "plan" && result.action !== "finish") {
-    const facts = new Set(context.scenario.facts.map((f) => f.id));
+    const facts = new Set(context.plot.facts.map((f) => f.id));
     if (result.allowedFactIds.some((id) => !facts.has(id)))
       throw new Error("Unknown fixed fact");
     const sourceIds = new Set(

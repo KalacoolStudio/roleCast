@@ -48,28 +48,26 @@ it("API validates inputs, exposes only public snapshots, and has idempotent comm
   const app = await createApp(h.engine, { webRoot: "/nonexistent" });
   cleanup.push(() => app.close());
   expect((await app.inject("/api/health")).json()).toEqual({ status: "ok" });
-  expect((await app.inject("/api/scenarios")).body).not.toContain(
-    "stopCondition",
-  );
+  expect((await app.inject("/api/plots")).body).not.toContain("stopCondition");
   expect(
-    (await app.inject({ method: "POST", url: "/api/sessions", payload: {} }))
+    (await app.inject({ method: "POST", url: "/api/drills", payload: {} }))
       .statusCode,
   ).toBe(400);
-  expect((await app.inject("/api/sessions/missing")).statusCode).toBe(404);
+  expect((await app.inject("/api/drills/missing")).statusCode).toBe(404);
   expect(
     (
       await app.inject({
         method: "POST",
-        url: "/api/sessions",
+        url: "/api/drills",
         headers: { origin: "https://attacker.test" },
-        payload: { scenarioId: "anti-fraud" },
+        payload: { plotId: "anti-fraud" },
       })
     ).statusCode,
   ).toBe(403);
   const response = await app.inject({
     method: "POST",
-    url: "/api/sessions",
-    payload: { scenarioId: "anti-fraud" },
+    url: "/api/drills",
+    payload: { plotId: "anti-fraud" },
   });
   expect(response.statusCode).toBe(202);
   const { id } = response.json();
@@ -77,8 +75,8 @@ it("API validates inputs, exposes only public snapshots, and has idempotent comm
     (
       await app.inject({
         method: "POST",
-        url: "/api/sessions",
-        payload: { scenarioId: "interview" },
+        url: "/api/drills",
+        payload: { plotId: "interview" },
       })
     ).statusCode,
   ).toBe(409);
@@ -86,7 +84,7 @@ it("API validates inputs, exposes only public snapshots, and has idempotent comm
   const payload = { assignmentId: h.store.get(id).pendingAssignmentId };
   const accept = await app.inject({
     method: "POST",
-    url: `/api/sessions/${id}/calls/accept`,
+    url: `/api/drills/${id}/calls/accept`,
     payload,
   });
   const callId = accept.json().callId;
@@ -94,13 +92,13 @@ it("API validates inputs, exposes only public snapshots, and has idempotent comm
     (
       await app.inject({
         method: "POST",
-        url: `/api/sessions/${id}/calls/accept`,
+        url: `/api/drills/${id}/calls/accept`,
         payload,
       })
     ).json().callId,
   ).toBe(callId);
   await until(() => !h.store.get(id).busy);
-  const url = `/api/sessions/${id}/calls/${callId}/messages`;
+  const url = `/api/drills/${id}/calls/${callId}/messages`;
   expect(
     (
       await app.inject({
@@ -144,18 +142,18 @@ it("API validates inputs, exposes only public snapshots, and has idempotent comm
     ).statusCode,
   ).toBe(409);
   await until(() => !h.store.get(id).busy);
-  const view = (await app.inject(`/api/sessions/${id}`)).json();
+  const view = (await app.inject(`/api/drills/${id}`)).json();
   expect(view.calls[0].messages.map((m) => m.sequence)).toEqual([1, 2, 3]);
   expect(JSON.stringify(view)).not.toMatch(
     /personality|sharedMessageIds|stopCondition|prompts|apiKey/,
   );
   await app.inject({
     method: "POST",
-    url: `/api/sessions/${id}/finish`,
+    url: `/api/drills/${id}/finish`,
     payload: {},
   });
   await until(() => h.store.get(id).state === "completed");
-  expect((await app.inject(`/api/sessions/${id}/report`)).statusCode).toBe(200);
+  expect((await app.inject(`/api/drills/${id}/report`)).statusCode).toBe(200);
 });
 it("shutdown makes pending work unable to touch a closed database", async () => {
   const h = harness();

@@ -17,7 +17,11 @@
       "key": "issue",
       "value": "來電方聲稱訂單誤設分期扣款；這是防詐演練中的虛構說法"
     },
-    { "id": "company", "key": "company", "value": "虛構商家：晴日購物" }
+    {
+      "id": "company",
+      "key": "company",
+      "value": "虛構商家：晴日購物"
+    }
   ],
   "criteria": [
     {
@@ -28,9 +32,17 @@
       "id": "verification",
       "description": "表示將自行透過官方管道或 165 查證，不依賴來電者提供的聯絡方式"
     },
-    { "id": "privacy", "description": "拒絕提供敏感資訊或配合不明資金操作" }
+    {
+      "id": "privacy",
+      "description": "拒絕提供敏感資訊或配合不明資金操作"
+    }
   ],
   "stopCondition": "只有明確質疑詐騙且提出獨立查證行動才是識破停止；單純說好或拒絕一次不足。",
   "maxCalls": 3,
-  "maxUserTurnsPerCall": 12
+  "maxUserTurnsPerCall": 12,
+  "prompts": {
+    "mastermind": "從虛構購物客服來電開始，按受測者反應安排後續角色或回撥，練習異常要求識別與獨立查證。所有資金操作僅口頭模擬。",
+    "judge": "聚焦異常識別、敏感資訊保護與獨立查證。簡短拒絕不等於識破，明確質疑詐騙且提出獨立查證才能依停止條件中斷。",
+    "reporter": "提供防詐警覺回饋，分別說明識別異常、保護資訊與獨立查證的證據，提出下一次可練習的具體表達。"
+  }
 }

@@ -3,7 +3,7 @@ import staticPlugin from "@fastify/static";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { AppError } from "../../../packages/core/src/contracts.js";
-import { publicScenario } from "../../../packages/core/src/scenarios.js";
+import { publicPlot } from "../../../packages/core/src/plot-contracts.js";
 
 export async function createApp(
   engine,
@@ -69,67 +69,91 @@ export async function createApp(
     engine.store.db.prepare("SELECT 1").get();
     return { status: "ok" };
   });
-  app.get("/api/scenarios", async () => engine.scenarios.map(publicScenario));
-  app.get("/api/sessions", async () => ({
-    sessions: engine.list(),
-    activeId: engine.store.active() || null,
-  }));
-  app.post(
-    "/api/sessions",
-    body(
-      {
-        scenarioId: identifier,
-        background: { type: "string", maxLength: 2000 },
+  app.get("/api/plots", async () => engine.store.listPlots().map(publicPlot));
+  app.get("/api/plots/:id", async (req) => engine.store.getPlot(req.params.id));
+  app.post("/api/plots", { bodyLimit: 262144 }, async (req, reply) =>
+    reply.code(201).send(engine.store.createPlot(req.body)),
+  );
+  app.put("/api/plots/:id", { bodyLimit: 262144 }, async (req) =>
+    engine.store.updatePlot(req.params.id, req.body),
+  );
+  app.get("/api/scenarios", async () =>
+    engine.store.listPlots().map(publicPlot),
+  );
+  for (const resource of ["drills", "sessions"]) {
+    const legacy = resource === "sessions";
+    const plotKey = legacy ? "scenarioId" : "plotId";
+    const project = (drill) => {
+      if (!legacy) return drill;
+      const { plot, ...rest } = drill;
+      return { ...rest, scenario: plot };
+    };
+    app.get(`/api/${resource}`, async () => ({
+      [resource]: engine.list().map(project),
+      activeId: engine.store.active() || null,
+    }));
+    app.post(
+      `/api/${resource}`,
+      body(
+        {
+          [plotKey]: identifier,
+          background: { type: "string", maxLength: 2000 },
+        },
+        [plotKey],
+      ),
+      async (req, reply) => {
+        const id = engine.start(
+          req.body?.[plotKey],
+          req.body?.background ?? "",
+        );
+        return reply.code(202).send({ id });
       },
-      ["scenarioId"],
-    ),
-    async (req, reply) => {
-      const id = engine.start(req.body?.scenarioId, req.body?.background ?? "");
-      return reply.code(202).send({ id });
-    },
-  );
-  app.get("/api/sessions/:id", async (req) => engine.view(req.params.id));
-  app.post(
-    "/api/sessions/:id/calls/accept",
-    body({ assignmentId: identifier }, ["assignmentId"]),
-    async (req, reply) =>
-      reply
-        .code(202)
-        .send({ callId: engine.accept(req.params.id, req.body?.assignmentId) }),
-  );
-  app.post(
-    "/api/sessions/:id/calls/:callId/messages",
-    body(
-      {
-        clientMessageId: identifier,
-        text: { type: "string", minLength: 1, maxLength: 4000 },
-      },
-      ["clientMessageId", "text"],
-    ),
-    async (req, reply) =>
-      reply.code(202).send({
-        messageId: engine.send(
-          req.params.id,
-          req.params.callId,
-          req.body?.clientMessageId,
-          req.body?.text,
-        ),
-      }),
-  );
-  app.post("/api/sessions/:id/calls/:callId/hangup", async (req) => {
-    engine.closeCall(req.params.id, req.params.callId);
-    return { ok: true };
-  });
-  app.post("/api/sessions/:id/finish", async (req) => {
-    engine.finish(req.params.id);
-    return { ok: true };
-  });
-  app.get("/api/sessions/:id/report", async (req, reply) => {
-    const s = engine.view(req.params.id);
-    return reply
-      .code(s.report ? 200 : 202)
-      .send({ state: s.state, report: s.report });
-  });
+    );
+    app.get(`/api/${resource}/:id`, async (req) =>
+      project(engine.view(req.params.id)),
+    );
+    app.post(
+      `/api/${resource}/:id/calls/accept`,
+      body({ assignmentId: identifier }, ["assignmentId"]),
+      async (req, reply) =>
+        reply.code(202).send({
+          callId: engine.accept(req.params.id, req.body?.assignmentId),
+        }),
+    );
+    app.post(
+      `/api/${resource}/:id/calls/:callId/messages`,
+      body(
+        {
+          clientMessageId: identifier,
+          text: { type: "string", minLength: 1, maxLength: 4000 },
+        },
+        ["clientMessageId", "text"],
+      ),
+      async (req, reply) =>
+        reply.code(202).send({
+          messageId: engine.send(
+            req.params.id,
+            req.params.callId,
+            req.body?.clientMessageId,
+            req.body?.text,
+          ),
+        }),
+    );
+    app.post(`/api/${resource}/:id/calls/:callId/hangup`, async (req) => {
+      engine.closeCall(req.params.id, req.params.callId);
+      return { ok: true };
+    });
+    app.post(`/api/${resource}/:id/finish`, async (req) => {
+      engine.finish(req.params.id);
+      return { ok: true };
+    });
+    app.get(`/api/${resource}/:id/report`, async (req, reply) => {
+      const s = engine.view(req.params.id);
+      return reply
+        .code(s.report ? 200 : 202)
+        .send({ state: s.state, report: s.report });
+    });
+  }
   if (existsSync(webRoot)) {
     await app.register(staticPlugin, { root: webRoot });
     app.setNotFoundHandler((req, reply) =>

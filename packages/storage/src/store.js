@@ -1,7 +1,18 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { terminal, conflict, missing } from "../../core/src/contracts.js";
+import { randomUUID } from "node:crypto";
+import {
+  terminal,
+  conflict,
+  missing,
+  AppError,
+} from "../../core/src/contracts.js";
+import {
+  parsePlot,
+  plotSchema,
+  plotDefinitionSchema,
+} from "../../core/src/plot-contracts.js";
 
 const collections = [
   "personas",
@@ -18,7 +29,7 @@ export class Store {
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("journal_mode = WAL");
     const version = this.db.pragma("user_version", { simple: true });
-    if (version > 1) {
+    if (version > 2) {
       this.db.close();
       throw new Error("資料庫版本較新，請使用相容的程式。");
     }
@@ -37,6 +48,71 @@ export class Store {
         PRAGMA user_version = 1;
       `);
       })();
+    if (version < 2)
+      this.db.transaction(() => {
+        this.db.exec(
+          "CREATE TABLE plots (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL)",
+        );
+        for (const row of this.db
+          .prepare("SELECT id,payload FROM sessions")
+          .all()) {
+          const data = JSON.parse(row.payload);
+          if (data.scenario) {
+            data.plot = data.scenario;
+            delete data.scenario;
+            this.db
+              .prepare("UPDATE sessions SET payload=? WHERE id=?")
+              .run(JSON.stringify(data), row.id);
+          }
+        }
+        this.db.pragma("user_version = 2");
+      })();
+  }
+  seedPlots(plots) {
+    this.db.transaction(() => {
+      for (const input of plots) {
+        const plot = parsePlot(input, plotSchema);
+        this.db
+          .prepare("INSERT INTO plots VALUES(?,?,?) ON CONFLICT(id) DO NOTHING")
+          .run(plot.id, plot.version, JSON.stringify(plot));
+      }
+    })();
+  }
+  listPlots() {
+    return this.db
+      .prepare("SELECT payload FROM plots ORDER BY rowid")
+      .all()
+      .map(({ payload }) => JSON.parse(payload));
+  }
+  getPlot(id) {
+    const row = this.db.prepare("SELECT payload FROM plots WHERE id=?").get(id);
+    if (!row) throw new AppError("PLOT_NOT_FOUND", "找不到指定的劇本。", 404);
+    return JSON.parse(row.payload);
+  }
+  createPlot(input) {
+    const plot = { ...parsePlot(input), id: randomUUID(), version: 1 };
+    this.db
+      .prepare("INSERT INTO plots VALUES(?,?,?)")
+      .run(plot.id, plot.version, JSON.stringify(plot));
+    return plot;
+  }
+  updatePlot(id, input) {
+    const { version, ...definition } = parsePlot(
+      input,
+      plotDefinitionSchema.extend({ version: plotSchema.shape.version }),
+    );
+    const plot = { ...definition, id, version: version + 1 };
+    this.getPlot(id);
+    const result = this.db
+      .prepare("UPDATE plots SET version=?,payload=? WHERE id=? AND version=?")
+      .run(plot.version, JSON.stringify(plot), id, version);
+    if (!result.changes)
+      throw new AppError(
+        "PLOT_CONFLICT",
+        "劇本已在其他分頁更新。草稿已保留，請重新載入最新版本後再修改。",
+        409,
+      );
+    return plot;
   }
   active() {
     return this.db
@@ -70,7 +146,7 @@ export class Store {
     s.report = report ? JSON.parse(report.payload) : null;
     return s;
   }
-  save(session) {
+  save(drill) {
     this.db.transaction(() => {
       const {
         personas,
@@ -81,43 +157,37 @@ export class Store {
         recaps,
         report,
         ...meta
-      } = session;
+      } = drill;
       this.db
         .prepare(
           "INSERT INTO sessions VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,payload=excluded.payload",
         )
-        .run(session.id, session.state, JSON.stringify(meta));
+        .run(drill.id, drill.state, JSON.stringify(meta));
       for (const p of personas)
         this.db
           .prepare(
             "INSERT INTO personas VALUES(?,?,?) ON CONFLICT(session_id,id) DO UPDATE SET payload=excluded.payload",
           )
-          .run(session.id, p.id, JSON.stringify(p));
+          .run(drill.id, p.id, JSON.stringify(p));
       for (const a of assignments)
         this.db
           .prepare(
             "INSERT INTO assignments VALUES(?,?,?,?) ON CONFLICT(session_id,id) DO UPDATE SET payload=excluded.payload",
           )
-          .run(session.id, a.id, a.personaId, JSON.stringify(a));
+          .run(drill.id, a.id, a.personaId, JSON.stringify(a));
       for (const c of calls)
         this.db
           .prepare(
             "INSERT INTO calls VALUES(?,?,?,?,?) ON CONFLICT(session_id,id) DO UPDATE SET payload=excluded.payload",
           )
-          .run(
-            session.id,
-            c.id,
-            c.personaId,
-            c.assignmentId,
-            JSON.stringify(c),
-          );
+          .run(drill.id, c.id, c.personaId, c.assignmentId, JSON.stringify(c));
       for (const m of messages)
         this.db
           .prepare(
             "INSERT INTO messages VALUES(?,?,?,?,?,?) ON CONFLICT(session_id,id) DO NOTHING",
           )
           .run(
-            session.id,
+            drill.id,
             m.id,
             m.callId,
             m.clientMessageId || null,
@@ -133,13 +203,13 @@ export class Store {
             .prepare(
               `INSERT INTO ${table} VALUES(?,?,?,?) ON CONFLICT(session_id,id) DO NOTHING`,
             )
-            .run(session.id, entry.id, entry.callId, JSON.stringify(entry));
+            .run(drill.id, entry.id, entry.callId, JSON.stringify(entry));
       if (report)
         this.db
           .prepare(
             "INSERT INTO reports VALUES(?,?) ON CONFLICT(session_id) DO NOTHING",
           )
-          .run(session.id, JSON.stringify(report));
+          .run(drill.id, JSON.stringify(report));
     })();
   }
   create(s) {

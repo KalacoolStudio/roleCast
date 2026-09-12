@@ -31,6 +31,10 @@ build:
 start:
     exec node apps/server/src/main.js
 
+# 使用 ngrok 分享已啟動的正式介面與 API
+tunnel:
+    exec node scripts/tunnel.js
+
 # 查看本機服務健康狀態
 status:
     node scripts/status.js

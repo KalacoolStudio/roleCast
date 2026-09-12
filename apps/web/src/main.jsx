@@ -1,3 +1,4 @@
+import { PlotEditor } from "./PlotEditor.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
@@ -22,13 +23,13 @@ const ends = {
   interrupted: "服務已中斷",
 };
 const finished = (s) => ["completed", "failed", "interrupted"].includes(s);
-async function api(path, body) {
+async function api(path, body, method = "POST") {
   const response = await fetch(
     `/api${path}`,
     body === undefined
       ? {}
       : {
-          method: "POST",
+          method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         },
@@ -49,48 +50,50 @@ const date = (value) =>
     minute: "2-digit",
   });
 function App() {
-  const [scenarios, setScenarios] = useState([]),
-    [sessions, setSessions] = useState([]);
+  const [plots, setPlots] = useState([]),
+    [drills, setDrills] = useState([]);
   const [id, setId] = useState(location.hash.slice(1)),
-    [session, setSession] = useState(null);
-  const [scenarioId, setScenarioId] = useState("anti-fraud"),
+    [drill, setDrill] = useState(null);
+  const [plotId, setPlotId] = useState("anti-fraud"),
     [background, setBackground] = useState("");
   const [text, setText] = useState(""),
     [error, setError] = useState(""),
     [acting, setActing] = useState(false);
   const [activeId, setActiveId] = useState(null);
+  const [managing, setManaging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const selected = useRef(id),
     bottom = useRef(null);
   const select = useCallback((next) => {
+    setManaging(false);
     selected.current = next;
     setId(next);
     location.hash = next;
-    setSession(null);
+    setDrill(null);
     setText("");
     setError("");
     setShowHistory(false);
   }, []);
   const loadList = useCallback(async () => {
-    const list = await api("/sessions");
-    setSessions(list.sessions);
+    const list = await api("/drills");
+    setDrills(list.drills);
     setActiveId(list.activeId);
     return list;
   }, []);
   const refresh = useCallback(async (target) => {
-    const value = await api(`/sessions/${target}`);
+    const value = await api(`/drills/${target}`);
     if (selected.current === target) {
-      setSession(value);
+      setDrill(value);
       setError("");
     }
     return value;
   }, []);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api("/scenarios"), loadList()])
+    Promise.all([api("/plots"), loadList()])
       .then(([available, list]) => {
         if (cancelled) return;
-        setScenarios(available);
+        setPlots(available);
         if (!selected.current && list.activeId) select(list.activeId);
       })
       .catch(() => {
@@ -126,7 +129,7 @@ function App() {
   }, [id, refresh, loadList]);
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [session?.calls.at(-1)?.messages.length]);
+  }, [drill?.calls.at(-1)?.messages.length]);
   const action = async (fn) => {
     setActing(true);
     setError("");
@@ -142,15 +145,15 @@ function App() {
   };
   const start = () =>
     action(async () => {
-      const { id: newId } = await api("/sessions", { scenarioId, background });
+      const { id: newId } = await api("/drills", { plotId, background });
       select(newId);
     });
   const command = (path, body = {}) =>
     action(async () => {
-      await api(`/sessions/${id}${path}`, body);
+      await api(`/drills/${id}${path}`, body);
       await refresh(id);
     });
-  const call = session?.calls.find((c) => c.id === session.currentCallId);
+  const call = drill?.calls.find((c) => c.id === drill.currentCallId);
   const send = (event) => {
     event.preventDefault();
     if (!text.trim() || !call) return;
@@ -164,18 +167,18 @@ function App() {
       }
       if (
         !pending ||
-        pending.sessionId !== id ||
+        (pending.drillId ?? pending.sessionId) !== id ||
         pending.callId !== call.id ||
         pending.text !== text
       )
         pending = {
-          sessionId: id,
+          drillId: id,
           callId: call.id,
           text,
           clientMessageId: crypto.randomUUID(),
         };
       sessionStorage.setItem(key, JSON.stringify(pending));
-      await api(`/sessions/${id}/calls/${call.id}/messages`, {
+      await api(`/drills/${id}/calls/${call.id}/messages`, {
         text: pending.text,
         clientMessageId: pending.clientMessageId,
       });
@@ -186,11 +189,11 @@ function App() {
   };
   const retry = () =>
     action(async () => {
-      setScenarios(await api("/scenarios"));
+      setPlots(await api("/plots"));
       await loadList();
       if (id) await refresh(id);
     });
-  const messages = session?.calls.flatMap((c) => c.messages) || [];
+  const messages = drill?.calls.flatMap((c) => c.messages) || [];
   return (
     <div className="shell">
       <aside className={`sidebar ${showHistory ? "history-open" : ""}`}>
@@ -210,10 +213,16 @@ function App() {
           </span>
         </a>
         <button
-          className={`nav-item ${!id ? "selected" : ""}`}
+          className={`nav-item ${!id && !managing ? "selected" : ""}`}
           onClick={() => select("")}
         >
           <span>＋</span> 開始新演練
+        </button>
+        <button
+          className={`nav-item ${managing ? "selected" : ""}`}
+          onClick={() => setManaging(true)}
+        >
+          劇本工作室
         </button>
         {activeId && (
           <button className="nav-item" onClick={() => select(activeId)}>
@@ -228,17 +237,17 @@ function App() {
           演練紀錄 {showHistory ? "−" : "＋"}
         </button>
         <div className="section-label">
-          演練紀錄 <span>{sessions.length.toString().padStart(2, "0")}</span>
+          演練紀錄 <span>{drills.length.toString().padStart(2, "0")}</span>
         </div>
         <div className="history">
-          {sessions.length ? (
-            sessions.map((s) => (
+          {drills.length ? (
+            drills.map((s) => (
               <button
                 key={s.id}
                 className={`history-item ${s.id === id ? "current" : ""}`}
                 onClick={() => select(s.id)}
               >
-                <strong>{s.scenario.name}</strong>
+                <strong>{s.plot.name}</strong>
                 <span>{date(s.createdAt)}</span>
                 <small>{labels[s.state]}</small>
               </button>
@@ -259,7 +268,11 @@ function App() {
         <header className="topbar">
           <span>
             WORKSPACE <span className="slash">/</span>{" "}
-            {session ? "演練現場" : "情境練習"}
+            {managing
+              ? "劇本工作室"
+              : drill
+                ? "演練現場 · DRILL"
+                : "劇本練習 · PLOT"}
           </span>
           <span className="badge">TEXT EDITION</span>
         </header>
@@ -271,7 +284,20 @@ function App() {
             </button>
           </div>
         )}
-        {!id ? (
+        {managing ? (
+          <PlotEditor
+            plots={plots}
+            api={api}
+            onSaved={async (plot) => {
+              setPlots(await api("/plots"));
+              setPlotId(plot.id);
+            }}
+            onUse={(plotId) => {
+              select("");
+              setPlotId(plotId);
+            }}
+          />
+        ) : !id ? (
           <div className="home">
             <div className="eyebrow">
               <span /> PRACTICE MAKES PROGRESS
@@ -286,17 +312,20 @@ function App() {
               <br />
               在安全的練習空間裡，找到自己的節奏。
             </p>
-            <div className="scenario-heading">
+            <div className="plot-heading">
               <h2>選擇今天的練習</h2>
-              <span>01 — SELECT A SCENARIO</span>
+              <span>01 — SELECT A PLOT</span>
             </div>
-            <div className="scenario-grid">
-              {scenarios.map((s, index) => (
+            <p className="hint">
+              每個 plot 是一份劇本；每次開始會建立新的 drill。
+            </p>
+            <div className="plot-grid">
+              {plots.map((s, index) => (
                 <button
-                  className={`scenario-card ${scenarioId === s.id ? "chosen" : ""}`}
+                  className={`plot-card ${plotId === s.id ? "chosen" : ""}`}
                   key={s.id}
-                  onClick={() => setScenarioId(s.id)}
-                  aria-pressed={scenarioId === s.id}
+                  onClick={() => setPlotId(s.id)}
+                  aria-pressed={plotId === s.id}
                 >
                   <div className="card-top">
                     <span className="card-icon">{index === 0 ? "◎" : "↗"}</span>
@@ -334,7 +363,7 @@ function App() {
               <button
                 className="primary"
                 onClick={start}
-                disabled={acting || !scenarios.length || !!activeId}
+                disabled={acting || !plots.length || !!activeId}
               >
                 {acting ? "正在開始…" : "開始演練"} <span>↗</span>
               </button>
@@ -359,7 +388,7 @@ function App() {
               </p>
             </div>
           </div>
-        ) : !session ? (
+        ) : !drill ? (
           <div className="loading" role="status">
             正在取得演練紀錄…
           </div>
@@ -367,38 +396,40 @@ function App() {
           <div className="exercise">
             <div className="exercise-title">
               <div>
-                <div className="eyebrow">YOUR PRACTICE SESSION</div>
-                <h1>{session.scenario.name}</h1>
-                <p>{date(session.createdAt)}</p>
+                <div className="eyebrow">YOUR DRILL</div>
+                <h1>{drill.plot.name}</h1>
+                <p>
+                  {date(drill.createdAt)} · Plot v{drill.plot.version}
+                </p>
               </div>
               <span
-                className={`state ${finished(session.state) ? "ended" : ""}`}
+                className={`state ${finished(drill.state) ? "ended" : ""}`}
                 role="status"
               >
-                {session.busy ? "正在回覆…" : labels[session.state]}
+                {drill.busy ? "正在回覆…" : labels[drill.state]}
               </span>
             </div>
-            {session.error && (
+            {drill.error && (
               <div className="error" role="alert">
-                {session.error.message}
+                {drill.error.message}
               </div>
             )}
-            {session.pendingCall && (
+            {drill.pendingCall && (
               <section className="incoming">
                 <span className="avatar">
-                  {session.pendingCall.persona.name.slice(0, 1)}
+                  {drill.pendingCall.persona.name.slice(0, 1)}
                 </span>
                 <div>
                   <small>下一通對話</small>
-                  <h2>{session.pendingCall.persona.name}</h2>
-                  <p>{session.pendingCall.persona.role}</p>
+                  <h2>{drill.pendingCall.persona.name}</h2>
+                  <p>{drill.pendingCall.persona.role}</p>
                 </div>
                 <button
                   className="primary"
                   disabled={acting}
                   onClick={() =>
                     command("/calls/accept", {
-                      assignmentId: session.pendingCall.assignmentId,
+                      assignmentId: drill.pendingCall.assignmentId,
                     })
                   }
                 >
@@ -407,14 +438,14 @@ function App() {
               </section>
             )}
             <div className="transcript">
-              {!session.calls.length && !session.pendingCall && (
+              {!drill.calls.length && !drill.pendingCall && (
                 <div className="waiting">
-                  {finished(session.state)
+                  {finished(drill.state)
                     ? "這場演練尚無對話紀錄。"
                     : "正在為你準備第一通對話…"}
                 </div>
               )}
-              {session.calls.map((c) => (
+              {drill.calls.map((c) => (
                 <section className="call" key={c.id}>
                   <div className="call-heading">
                     <span className="avatar small">
@@ -443,7 +474,7 @@ function App() {
                         <p>{m.text}</p>
                       </div>
                     ))}
-                    {!c.endedAt && session.busy && (
+                    {!c.endedAt && drill.busy && (
                       <div className="typing" aria-label="正在處理回合">
                         <span />
                         <span />
@@ -455,7 +486,7 @@ function App() {
               ))}
               <div ref={bottom} />
             </div>
-            {session.state === "in_call" && (
+            {drill.state === "in_call" && (
               <form className="composer" onSubmit={send}>
                 <label className="sr-only" htmlFor="message">
                   你的回覆
@@ -465,21 +496,21 @@ function App() {
                   placeholder="寫下你的回覆…"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  disabled={acting || session.busy}
+                  disabled={acting || drill.busy}
                   maxLength={4000}
                 />
                 <button
                   className="primary"
                   type="submit"
-                  disabled={acting || session.busy || !text.trim()}
+                  disabled={acting || drill.busy || !text.trim()}
                 >
                   送出 ↑
                 </button>
               </form>
             )}
-            {!finished(session.state) && (
+            {!finished(drill.state) && (
               <div className="call-controls">
-                {session.state === "in_call" && (
+                {drill.state === "in_call" && (
                   <button
                     onClick={() => command(`/calls/${call.id}/hangup`)}
                     disabled={acting}
@@ -490,8 +521,8 @@ function App() {
                 <button
                   disabled={
                     acting ||
-                    session.finishRequested ||
-                    session.state === "reporting"
+                    drill.finishRequested ||
+                    drill.state === "reporting"
                   }
                   onClick={() => command("/finish")}
                 >
@@ -500,18 +531,18 @@ function App() {
                 <small>結束後會整理已完成的對話與回饋。</small>
               </div>
             )}
-            {session.report && (
+            {drill.report && (
               <section className="report">
                 <div className="eyebrow">REFLECT & GROW</div>
                 <h2>這次練習，你帶走了什麼？</h2>
-                <p className="summary">{session.report.summary}</p>
-                {session.report.insufficientEvidence && (
+                <p className="summary">{drill.report.summary}</p>
+                {drill.report.insufficientEvidence && (
                   <p className="evidence-note">
                     目前證據不足，部分面向尚無法評估。
                   </p>
                 )}
                 <div className="dimensions">
-                  {session.report.dimensions.map((d, i) => (
+                  {drill.report.dimensions.map((d, i) => (
                     <article key={i}>
                       <h3>{d.name}</h3>
                       <p>{d.assessment}</p>
@@ -522,20 +553,20 @@ function App() {
                 <div className="feedback-grid">
                   <Findings
                     title="做得好的地方"
-                    items={session.report.strengths}
+                    items={drill.report.strengths}
                     messages={messages}
                   />
                   <Findings
                     title="下一次可以試試"
-                    items={session.report.improvements}
+                    items={drill.report.improvements}
                     messages={messages}
                   />
                 </div>
-                {session.report.uncertainties.length > 0 && (
+                {drill.report.uncertainties.length > 0 && (
                   <div className="uncertainties">
                     <h3>仍需要更多練習的觀察</h3>
                     <ul>
-                      {session.report.uncertainties.map((v, i) => (
+                      {drill.report.uncertainties.map((v, i) => (
                         <li key={i}>{v}</li>
                       ))}
                     </ul>

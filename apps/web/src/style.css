@@ -249,28 +249,28 @@ h3,
 p {
   margin-top: 0;
 }
-.scenario-heading {
+.plot-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 17px;
 }
-.scenario-heading h2 {
+.plot-heading h2 {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
 }
-.scenario-heading > span {
+.plot-heading > span {
   font-size: 9px;
   letter-spacing: 1.2px;
   color: #96a18e;
 }
-.scenario-grid {
+.plot-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
-.scenario-card {
+.plot-card {
   text-align: left;
   border: 1px solid #dce3d5;
   border-radius: 12px;
@@ -279,7 +279,7 @@ p {
   color: inherit;
   position: relative;
 }
-.scenario-card.chosen {
+.plot-card.chosen {
   border: 1.5px solid #668056;
   background: #f0f4e9;
   box-shadow: 0 3px 15px #71886608;
@@ -315,12 +315,12 @@ p {
   border: 5px solid #668056;
   background: white;
 }
-.scenario-card h3 {
+.plot-card h3 {
   font-size: 20px;
   margin-bottom: 10px;
   letter-spacing: 0.5px;
 }
-.scenario-card p {
+.plot-card p {
   font-size: 13px;
   color: #7e8b75;
   line-height: 1.9;
@@ -770,7 +770,7 @@ footer span {
   .setup {
     grid-template-columns: 1fr;
   }
-  .scenario-card {
+  .plot-card {
     padding: 20px;
   }
   .error {
@@ -829,13 +829,13 @@ footer span {
   .exercise {
     padding: 30px 22px;
   }
-  .scenario-grid {
+  .plot-grid {
     grid-template-columns: 1fr;
   }
-  .scenario-heading > span {
+  .plot-heading > span {
     display: none;
   }
-  .scenario-card p {
+  .plot-card p {
     min-height: 0;
   }
   .card-top {
@@ -910,5 +910,182 @@ footer span {
   }
   .composer {
     padding: 10px;
+  }
+}
+
+.plot-studio {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 48px 60px;
+}
+.plot-studio h1 {
+  margin: 16px 0;
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.04em;
+}
+.plot-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.plot-toolbar button,
+.file-button,
+.plot-save-bar button:not(.primary),
+.plot-rows > button,
+.plot-row > button {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #cdd6cf;
+  background: #fff;
+  color: #254435;
+  cursor: pointer;
+}
+.file-button {
+  position: relative;
+  overflow: hidden;
+}
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  cursor: pointer;
+}
+.file-button:focus-within {
+  outline: 2px solid #28664d;
+  outline-offset: 3px;
+}
+.plot-library {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.plot-library article {
+  padding: 24px;
+  border: 1px solid #dfe5df;
+  border-radius: 16px;
+  background: #fff;
+}
+.plot-library h2 {
+  margin: 12px 0;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+.plot-library p {
+  line-height: 1.7;
+  color: #617167;
+  overflow-wrap: anywhere;
+}
+.plot-form-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.plot-form-title span,
+.plot-field small {
+  color: #617167;
+  font-size: 13px;
+}
+.plot-form fieldset {
+  min-width: 0;
+  border: 1px solid #dfe5df;
+  border-radius: 14px;
+  padding: 24px;
+  margin: 28px 0;
+  background: #fff;
+}
+.plot-form legend {
+  font-weight: 700;
+  padding: 0 8px;
+}
+.plot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+  min-width: 0;
+  font-size: 14px;
+}
+.plot-field > span {
+  font-weight: 600;
+}
+.plot-field input,
+.plot-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #cdd6cf;
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: #253b30;
+  font: inherit;
+  line-height: 1.6;
+}
+.plot-field textarea {
+  resize: vertical;
+}
+.plot-field input:focus,
+.plot-field textarea:focus {
+  outline: 2px solid #28664d;
+  outline-offset: 2px;
+}
+.plot-two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.plot-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+  align-items: end;
+  border-bottom: 1px solid #e6ebe6;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+.plot-row > button {
+  justify-self: start;
+  margin-bottom: 14px;
+}
+.plot-rows h3 {
+  margin-top: 28px;
+}
+.plot-rows h3 small {
+  color: #617167;
+  font-weight: 400;
+  font-size: 12px;
+}
+.plot-save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 20px 0;
+}
+.plot-notice {
+  padding: 16px;
+  border-radius: 10px;
+  color: #22563d;
+  background: #e7f0e7;
+}
+@media (max-width: 700px) {
+  .plot-studio {
+    padding: 28px 20px;
+  }
+  .plot-library,
+  .plot-two-columns,
+  .plot-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .plot-form fieldset {
+    padding: 16px;
+  }
+  .plot-toolbar {
+    gap: 8px;
+  }
+  .plot-save-bar .primary {
+    width: 100%;
   }
 }

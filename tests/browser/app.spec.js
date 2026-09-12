@@ -40,7 +40,7 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
     page.getByRole("heading", { name: "選擇今天的練習" }),
   ).toBeVisible();
   await expect(
-    page.locator(".scenario-card").filter({ hasText: "後端工程師面試" }),
+    page.locator(".plot-card").filter({ hasText: "後端工程師面試" }),
   ).toBeVisible();
   await expect(
     page.getByText(
@@ -78,7 +78,7 @@ test("interview recalls a persona and changes role on a later call; finishes wit
 }) => {
   await page.goto("/");
   await page
-    .locator(".scenario-card")
+    .locator(".plot-card")
     .filter({ hasText: "後端工程師面試" })
     .click();
   await page.getByRole("button", { name: /開始演練/ }).click();
@@ -106,13 +106,129 @@ test("early finish reports insufficient evidence and network recovery works", as
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
   await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
-  await page.route("**/api/sessions/*", (route) => route.abort());
+  await page.route("**/api/drills/*", (route) => route.abort());
   await expect(page.getByRole("alert")).toBeVisible();
-  await page.unroute("**/api/sessions/*");
+  await page.unroute("**/api/drills/*");
   await page.getByRole("button", { name: "重新取得狀態" }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "結束整場演練" }).click();
   await expect(
     page.getByText("目前證據不足，部分面向尚無法評估。"),
   ).toBeVisible();
+});
+
+test("plot editor copies, edits three prompts, exports/imports and launches an independent drill", async ({
+  page,
+}, testInfo) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
+  const library = page
+    .locator(".plot-library article")
+    .filter({ hasText: "防詐警覺演練" });
+  await library.getByRole("button", { name: "複製", exact: true }).click();
+  await page.getByLabel("劇本名稱", { exact: true }).fill("自訂客服演練");
+  await page
+    .getByLabel("Mastermind prompt")
+    .fill("請安排客服跟進，M_BROWSER。");
+  await page.getByLabel("Judge prompt").fill("請觀察查證行動，J_BROWSER。");
+  await page.getByLabel("Reporter prompt").fill("請給出具體回饋，R_BROWSER。");
+  await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "匯出 JSON" }).click();
+  const download = await downloaded;
+  const file = await download.path();
+  await page.screenshot({
+    path: testInfo.outputPath("plot-editor-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await expect(page.getByLabel("Reporter prompt")).toHaveValue(
+    "請給出具體回饋，R_BROWSER。",
+  );
+  await page.screenshot({
+    path: testInfo.outputPath("plot-editor-mobile.png"),
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "返回劇本列表" }).click();
+  await page.getByLabel("匯入劇本 JSON").setInputFiles(file);
+  await expect(page.getByRole("status")).toContainText("已匯入草稿");
+  await expect(page.getByLabel("Mastermind prompt")).toHaveValue(
+    "請安排客服跟進，M_BROWSER。",
+  );
+  await expect(page.getByLabel("Judge prompt")).toHaveValue(
+    "請觀察查證行動，J_BROWSER。",
+  );
+  await expect(page.getByLabel("Reporter prompt")).toHaveValue(
+    "請給出具體回饋，R_BROWSER。",
+  );
+  await page.getByLabel("劇本名稱", { exact: true }).fill("匯入客服演練");
+  await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");
+  await page.getByRole("button", { name: "使用此劇本 ↗" }).click();
+  await expect(page.locator(".plot-card.chosen")).toContainText("匯入客服演練");
+  await page.getByRole("button", { name: /開始演練/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "匯入客服演練" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Plot v1/)).toBeVisible();
+  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await expect(page.locator(".report")).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "匯入客服演練" }),
+  ).toBeVisible();
+});
+
+test("new plot authoring validates imports and preserves drafts on conflicts", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
+  await page.getByLabel("匯入劇本 JSON").setInputFiles({
+    name: "bad.json",
+    mimeType: "application/json",
+    buffer: Buffer.from('{"formatVersion":2,"plot":{}}'),
+  });
+  await expect(page.getByRole("alert")).toContainText("劇本欄位無效");
+  await expect(
+    page.getByRole("heading", { name: "新增劇本", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "＋ 新增劇本" }).click();
+  await page.getByLabel("劇本名稱", { exact: true }).fill("危機溝通");
+  await page.getByLabel("劇本簡介").fill("練習對外說明事件。");
+  await page.getByLabel("演練目標").fill("用可查證事實解釋事件。");
+  await page.getByLabel("判準內容 1").fill("區分事實與推測。");
+  await page.getByLabel("停止條件").fill("已說明事實並提出下一步。");
+  await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");
+  const plots = await (await request.get("/api/plots")).json();
+  const plot = await (
+    await request.get(
+      `/api/plots/${plots.find((p) => p.name === "危機溝通").id}`,
+    )
+  ).json();
+  const { id, ...body } = plot;
+  await request.put(`/api/plots/${id}`, {
+    data: { ...body, name: "其他分頁改過" },
+  });
+  await page.getByLabel("Reporter prompt").fill("不可遺失的草稿");
+  await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("其他分頁");
+  await expect(page.getByLabel("Reporter prompt")).toHaveValue(
+    "不可遺失的草稿",
+  );
+  await page.getByRole("button", { name: "放棄草稿並重新載入" }).click();
+  await expect(page.getByLabel("劇本名稱", { exact: true })).toHaveValue(
+    "其他分頁改過",
+  );
+  await page.getByLabel("Reporter prompt").fill("新的報告方式");
+  await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已儲存劇本 · v3");
 });
