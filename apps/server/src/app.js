@@ -266,6 +266,32 @@ export async function createApp(
           ),
         }),
     );
+    app.post(
+      `/api/${resource}/:id/calls/:callId/atm`,
+      body(
+        {
+          clientActionId: identifier,
+          action: { type: "string", enum: ["transfer", "withdraw"] },
+          amount: { type: "integer", minimum: 1, maximum: 10000000 },
+          recipient: { type: "string", minLength: 4, maxLength: 64 },
+        },
+        ["clientActionId", "action", "amount"],
+      ),
+      async (req, reply) =>
+        reply
+          .code(202)
+          .send(
+            engine.atmAction(
+              req.params.id,
+              req.params.callId,
+              req.body.clientActionId,
+              req.body.action,
+              req.body.amount,
+              req.body.recipient,
+              req.workspaceId,
+            ),
+          ),
+    );
     app.post(`/api/${resource}/:id/calls/:callId/hangup`, async (req) => {
       engine.closeCall(
         req.params.id,

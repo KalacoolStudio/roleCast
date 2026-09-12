@@ -116,6 +116,54 @@ it("coalesces new evidence behind a running Judge without blocking audio or star
   expect(calls[1].voiceEvidence).toContain("不一定是完整回答");
   expect(h.agents.calls.filter((c) => c.kind === "reply")).toHaveLength(1);
 });
+it("sends a completed ATM action to the active Judge immediately and only deducts it once", async () => {
+  const contexts = [];
+  const h = await setup({
+    voiceFirst: true,
+    agents: {
+      watch: (context) => {
+        contexts.push(context);
+        return keep;
+      },
+    },
+  });
+  await h.attach();
+  const first = h.engine.atmAction(
+    h.id,
+    h.callId,
+    "atm-action-1",
+    "transfer",
+    1250,
+    "1234 5678",
+  );
+  await until(() => contexts.length === 1);
+  await until(() => h.store.get(h.id).watches.length === 1);
+  expect(first.balance).toBe(98750);
+  expect(contexts[0].messages.at(-1)).toMatchObject({
+    id: first.messageId,
+    source: "atm",
+    action: "transfer",
+    amount: 1250,
+    recipientLast4: "5678",
+    balanceAfter: 98750,
+  });
+  expect(
+    h.engine.atmAction(
+      h.id,
+      h.callId,
+      "atm-action-1",
+      "transfer",
+      1250,
+      "12345678",
+    ),
+  ).toEqual(first);
+  expect(
+    h.store.get(h.id).messages.filter((message) => message.source === "atm"),
+  ).toHaveLength(1);
+  expect(() =>
+    h.engine.atmAction(h.id, h.callId, "atm-action-2", "withdraw", 100000),
+  ).toThrow("餘額不足");
+});
 it("returning to text drains the final Judge and ignores provider text beyond the cutoff", async () => {
   const gate = deferred();
   const h = await setup({ agents: { watch: () => gate.promise } });
@@ -261,6 +309,14 @@ it("cumulative active duration includes muted time and multiple attempts while t
   expect(h.store.get(h.id).state).toBe("in_call");
   await until(() => !!h.store.get(h.id).calls[0].endedAt);
   expect(h.store.get(h.id).calls[0].endReason).toBe("voice_duration_limit");
+});
+it("caps a legacy plot voice budget at ten minutes", async () => {
+  const h = await setup();
+  const s = h.store.get(h.id);
+  s.plot.maxVoiceSecondsPerCall = 900;
+  h.store.save(s);
+  const reservation = h.media.reserve(h.id, h.callId, "legacy-budget");
+  expect(h.media.items.get(reservation.voiceId).remainingMs).toBe(600000);
 });
 it("busy text work prevents voice reservation and missing owner falls back without a paid connection", async () => {
   const h = await setup({ limits: { reservationMs: 25 } });

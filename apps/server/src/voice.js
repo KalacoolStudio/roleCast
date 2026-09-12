@@ -112,6 +112,14 @@ export class VoiceCoordinator {
       (a) => a.ownerId === ownerId && a.sessionId === id && a.callId === callId,
     );
   }
+  observeUserMessage(sessionId, callId, message, ownerId = defaultWorkspaceId) {
+    const item = this.itemFor(sessionId, callId, ownerId);
+    if (!item || item.frozen || !this.current(item)) return false;
+    item.pendingUser = Math.max(item.pendingUser, message.sequence);
+    this.send(item, { type: "checkpoint", messages: [message] });
+    this.judge(item);
+    return true;
+  }
   current(item) {
     if (
       this.disposed ||
@@ -176,7 +184,8 @@ export class VoiceCoordinator {
         .some((a) => a.requestId === requestId)
     )
       throw conflict();
-    const remainingMs = (s.plot.maxVoiceSecondsPerCall ?? 180) * 1000 - usedMs;
+    const remainingMs =
+      Math.min(s.plot.maxVoiceSecondsPerCall ?? 600, 600) * 1000 - usedMs;
     if (remainingMs <= 0) {
       this.engine.closeCall(sessionId, callId, "voice_duration_limit", ownerId);
       throw conflict();

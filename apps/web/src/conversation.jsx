@@ -61,13 +61,19 @@ export function Conversation({ call, events }) {
   return conversationRows(call, events).map((row) => (
     <div
       key={row.id}
-      className={`message ${row.speaker} ${row.voiceId ? "voice-message" : ""}`}
+      className={`message ${row.speaker} ${row.voiceId ? "voice-message" : ""} ${row.source === "atm" ? "atm-message" : ""}`}
     >
       {!row.voiceId &&
         row.anchors.map((id) => (
           <span key={id} id={`message-${id}`} className="evidence-anchor" />
         ))}
-      <small>{row.speaker === "user" ? "你" : call.persona.name}</small>
+      <small>
+        {row.source === "atm"
+          ? "ATM 操作"
+          : row.speaker === "user"
+            ? "你"
+            : call.persona.name}
+      </small>
       <p>{row.text}</p>
       {row.voiceId && (
         <small className="caption-note">

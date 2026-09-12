@@ -21,6 +21,7 @@ const definition = () => plotDefinition(builtInPlots[0]);
 
 it("validates authoring and portable JSON without accepting incomplete, conflicting or oversized data", () => {
   const good = definition();
+  expect(good.maxVoiceSecondsPerCall).toBe(600);
   expect(importPlot(exportPlot(builtInPlots[0]))).toEqual(good);
   for (const invalid of [
     { ...good, name: " " },
@@ -32,6 +33,7 @@ it("validates authoring and portable JSON without accepting incomplete, conflict
     { ...good, criteria: [] },
     { ...good, maxCalls: 4 },
     { ...good, maxUserTurnsPerCall: 13 },
+    { ...good, maxVoiceSecondsPerCall: 601 },
     {
       ...good,
       facts: Array.from({ length: 31 }, (_, i) => ({

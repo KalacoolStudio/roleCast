@@ -959,6 +959,316 @@ footer span {
   }
 }
 
+.atm-drawer-tab {
+  position: fixed;
+  z-index: 82;
+  right: 0;
+  top: 48%;
+  transform: translateY(-50%);
+  width: 46px;
+  min-height: 112px;
+  padding: 14px 9px;
+  border: 1px solid #b9c9b4;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: #244a37;
+  color: #fffef9;
+  box-shadow: 0 10px 28px #1833232e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  cursor: pointer;
+  transition:
+    right 220ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
+}
+.atm-drawer-tab span {
+  font-size: 19px;
+  color: #d9e9cf;
+}
+.atm-drawer-root.open .atm-drawer-tab {
+  right: min(420px, calc(100vw - 28px));
+  background: #365e46;
+}
+.atm-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  border: 0;
+  background: #17251d4a;
+  cursor: default;
+}
+.atm-drawer {
+  position: fixed;
+  z-index: 81;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, calc(100vw - 28px));
+  padding: 28px;
+  overflow-y: auto;
+  background: #f8faf4;
+  border-left: 1px solid #ccd7c7;
+  box-shadow: -18px 0 48px #1f352529;
+  transform: translateX(105%);
+  visibility: hidden;
+  transition:
+    transform 220ms ease,
+    visibility 220ms;
+}
+.atm-drawer-root.open .atm-drawer {
+  transform: translateX(0);
+  visibility: visible;
+}
+.atm-drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.atm-drawer header small {
+  color: #7d8d78;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+.atm-drawer header h2 {
+  margin: 4px 0 0;
+  font-size: 25px;
+  letter-spacing: 2px;
+}
+.atm-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d3ddd0;
+  border-radius: 50%;
+  background: #fff;
+  color: #52664f;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+.atm-balance {
+  min-height: 156px;
+  padding: 24px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #2b503c, #183a2b);
+  color: #fff;
+  box-shadow: 0 14px 32px #17352525;
+  display: flex;
+  flex-direction: column;
+}
+.atm-balance small {
+  color: #c5d8c1;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+}
+.atm-balance strong {
+  margin: 14px 0 auto;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.atm-balance span {
+  color: #a9c1a5;
+  font-size: 10px;
+}
+.atm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 22px 0;
+}
+.atm-actions button {
+  padding: 14px;
+  border: 1px solid #d4ddd0;
+  border-radius: 10px;
+  background: #fff;
+  color: #4d6250;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.atm-actions button[aria-selected="true"] {
+  border-color: #668056;
+  background: #e8efe2;
+  color: #244a37;
+  font-weight: 650;
+}
+.atm-actions button span {
+  font-size: 18px;
+}
+.atm-form {
+  padding: 20px;
+  border: 1px solid #dce4d8;
+  border-radius: 14px;
+  background: #fff;
+}
+.atm-form h3,
+.atm-history h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.atm-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 16px;
+  color: #617261;
+  font-size: 11px;
+}
+.atm-form input {
+  min-width: 0;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d3ddd0;
+  border-radius: 8px;
+  background: #fcfdf9;
+  color: #263e2f;
+  font: inherit;
+  font-size: 14px;
+}
+.atm-form input:focus {
+  outline: 2px solid #68865b;
+  outline-offset: 2px;
+}
+.atm-amount {
+  display: flex;
+  align-items: center;
+  border: 1px solid #d3ddd0;
+  border-radius: 8px;
+  background: #fcfdf9;
+}
+.atm-amount:focus-within {
+  outline: 2px solid #68865b;
+  outline-offset: 2px;
+}
+.atm-amount span {
+  padding-left: 12px;
+  color: #73836e;
+  font-size: 12px;
+}
+.atm-amount input {
+  border: 0;
+  outline: 0;
+}
+.atm-hint,
+.atm-feedback {
+  margin: 13px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.atm-hint {
+  color: #7c8978;
+}
+.atm-feedback.error-text {
+  color: #a4583d;
+}
+.atm-feedback.success-text {
+  color: #34704d;
+}
+.atm-submit {
+  width: 100%;
+  margin-top: 17px;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #244a37;
+  color: white;
+  cursor: pointer;
+}
+.atm-submit:disabled {
+  background: #aebbaa;
+  cursor: not-allowed;
+}
+.atm-history {
+  margin-top: 26px;
+}
+.atm-history > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.atm-history > div small {
+  color: #8a9784;
+}
+.atm-history ul {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border-top: 1px solid #dce4d8;
+}
+.atm-history li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  padding: 13px 2px;
+  border-bottom: 1px solid #e2e8df;
+  font-size: 12px;
+}
+.atm-history li strong {
+  color: #895d4d;
+}
+.atm-history li small {
+  grid-column: 1 / -1;
+  color: #8a9784;
+}
+.atm-history > p {
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px dashed #d4ddd0;
+  border-radius: 10px;
+  color: #899584;
+  font-size: 12px;
+  text-align: center;
+}
+.message.atm-message {
+  align-self: center;
+  max-width: 92%;
+}
+.message.atm-message small {
+  text-align: center;
+  color: #7d6e55;
+}
+.message.atm-message p {
+  border: 1px solid #e0d2b8;
+  border-radius: 10px;
+  background: #f6f0e3;
+  color: #65583f;
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 700px) {
+  .atm-drawer {
+    padding: 22px 18px;
+  }
+  .atm-drawer-tab {
+    min-height: 92px;
+  }
+  .atm-drawer-root.open .atm-drawer-tab {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .atm-balance strong {
+    font-size: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atm-drawer,
+  .atm-drawer-tab {
+    transition: none;
+  }
+}
+
 .plot-studio {
   max-width: 1080px;
   margin: 0 auto;

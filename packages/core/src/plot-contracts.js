@@ -24,7 +24,7 @@ export const plotDefinitionSchema = z
     stopCondition: text(4000),
     maxCalls: z.number().int().min(1).max(3),
     maxUserTurnsPerCall: z.number().int().min(1).max(12),
-    maxVoiceSecondsPerCall: z.number().int().min(1).max(3600).default(180),
+    maxVoiceSecondsPerCall: z.number().int().min(1).max(600).default(600),
     prompts: z
       .object({
         mastermind: text(12000),
@@ -92,7 +92,7 @@ export const publicPlot = ({
   category,
   description,
   duration,
-  maxVoiceSecondsPerCall = 180,
+  maxVoiceSecondsPerCall = 600,
 }) => ({
   id,
   version,
@@ -113,7 +113,7 @@ export const blankPlot = () => ({
   stopCondition: "",
   maxCalls: 3,
   maxUserTurnsPerCall: 12,
-  maxVoiceSecondsPerCall: 180,
+  maxVoiceSecondsPerCall: 600,
   prompts: {
     mastermind: "依演練目標安排角色及對話任務，根據每通回顧調整難度。",
     judge: "以劇本判準客觀評估具體回答，區分已展現能力與證據不足。",

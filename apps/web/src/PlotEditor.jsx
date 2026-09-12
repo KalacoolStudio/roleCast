@@ -191,7 +191,7 @@ export function PlotEditor({ plots, api, onSaved, onUse }) {
               {[
                 ["maxCalls", "最多通話數", 3],
                 ["maxUserTurnsPerCall", "每通最多回合數", 12],
-                ["maxVoiceSecondsPerCall", "每通語音秒數", 3600],
+                ["maxVoiceSecondsPerCall", "每通語音秒數", 600],
               ].map(([key, label, max]) => (
                 <label className="plot-field" key={key}>
                   <span>{label}</span>

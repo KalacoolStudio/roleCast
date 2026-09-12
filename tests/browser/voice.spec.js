@@ -65,6 +65,10 @@ test.afterEach(async ({ page }) => {
 const stats = async (request) =>
   (await request.get("/api/__test/voice")).json();
 const control = (request, data) => request.post("/api/__test/voice", { data });
+async function currentDrill(page) {
+  const id = new URL(page.url()).hash.slice(1);
+  return (await page.request.get(`/api/drills/${id}`)).json();
+}
 async function start(page) {
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
@@ -153,6 +157,54 @@ test("voice-only calls save speech automatically and keep text controls absent",
   await page.getByRole("button", { name: "掛斷本通" }).click();
   await released(page);
   await expect(page.locator(".call")).toHaveCount(1);
+});
+test("ATM drawer updates the drill balance and sends transfer and withdrawal evidence", async ({
+  page,
+}, testInfo) => {
+  await start(page);
+  await page.getByRole("button", { name: "用語音接通" }).click();
+  await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
+
+  const tab = page.getByRole("button", { name: "ATM", exact: true });
+  await expect(tab).toHaveAttribute("aria-expanded", "false");
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByLabel("帳戶餘額")).toContainText("100,000");
+  await page.getByLabel("收款帳號").fill("1234 5678");
+  await page.getByLabel("匯款金額").fill("1250");
+  await page.getByRole("button", { name: "確認匯款" }).click();
+  await expect(page.locator(".atm-feedback[role='status']")).toContainText(
+    "Judge 已收到操作紀錄",
+  );
+  await expect(page.getByLabel("帳戶餘額")).toContainText("98,750");
+  await expect(page.locator(".message.atm-message")).toContainText(
+    "收款帳號末四碼 5678",
+  );
+  await page.screenshot({ path: testInfo.outputPath("atm-drawer.png") });
+
+  await page.getByRole("tab", { name: "提款" }).click();
+  await page.getByLabel("提款金額").fill("750");
+  await page.getByRole("button", { name: "確認提款" }).click();
+  await expect(page.getByLabel("帳戶餘額")).toContainText("98,000");
+  await expect(page.locator(".message.atm-message")).toHaveCount(2);
+  const drill = await currentDrill(page);
+  expect(drill.atm).toMatchObject({ balance: 98000 });
+  expect(drill.atm.transactions).toHaveLength(2);
+  expect(JSON.stringify(drill)).not.toContain("12345678");
+  expect(
+    drill.calls[0].messages.filter((message) => message.source === "atm"),
+  ).toHaveLength(2);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("atm-drawer-mobile.png") });
+
+  await page.keyboard.press("Escape");
+  await expect(tab).toHaveAttribute("aria-expanded", "false");
 });
 test("Judge stops voice playback and report opens the exact voice evidence", async ({
   page,

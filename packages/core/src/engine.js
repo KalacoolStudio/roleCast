@@ -13,6 +13,8 @@ import { publicPlot } from "./plot-contracts.js";
 
 const now = () => new Date().toISOString();
 const defaultWorkspaceId = "default";
+const initialAtmBalance = 100000;
+const amountText = (amount) => `NT$${amount.toLocaleString("en-US")}`;
 export class Engine {
   constructor(store, agents, plots = defaults) {
     this.store = store;
@@ -95,6 +97,7 @@ export class Engine {
       watches: [],
       recaps: [],
       report: null,
+      atm: { balance: initialAtmBalance },
     };
     this.store.create(s);
     this.plan(s);
@@ -285,7 +288,9 @@ export class Engine {
       this.store.save(latest);
       const turnCount = latest.messages.filter(
         (m) =>
-          m.callId === callId && m.speaker === "user" && m.source !== "voice",
+          m.callId === callId &&
+          m.speaker === "user" &&
+          !["voice", "atm"].includes(m.source),
       ).length;
       if (reply.requestHangup || turnCount >= latest.plot.maxUserTurnsPerCall)
         this.closeCall(
@@ -296,6 +301,88 @@ export class Engine {
         );
     });
     return message.id;
+  }
+  atmAction(
+    id,
+    callId,
+    clientActionId,
+    action,
+    amount,
+    recipient,
+    ownerId = defaultWorkspaceId,
+  ) {
+    clientActionId = inputText(clientActionId, 100);
+    if (!["transfer", "withdraw"].includes(action))
+      throw new AppError("INVALID_INPUT", "ATM 操作不正確。", 400);
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000)
+      throw new AppError(
+        "INVALID_INPUT",
+        "ATM 金額需為 1 至 10,000,000 的整數。",
+        400,
+      );
+    let recipientLast4 = null;
+    if (action === "transfer") {
+      recipient = inputText(recipient, 64).replace(/[ -]/g, "");
+      if (!/^\d{4,32}$/.test(recipient))
+        throw new AppError("INVALID_INPUT", "收款帳號格式不正確。", 400);
+      recipientLast4 = recipient.slice(-4);
+    }
+    const s = this.store.get(id, ownerId);
+    const previous = s.messages.find(
+      (message) => message.clientMessageId === clientActionId,
+    );
+    if (previous) {
+      if (
+        previous.source !== "atm" ||
+        previous.callId !== callId ||
+        previous.action !== action ||
+        previous.amount !== amount ||
+        previous.recipientLast4 !== recipientLast4
+      )
+        throw conflict();
+      return { messageId: previous.id, balance: previous.balanceAfter };
+    }
+    const call = s.calls.find((candidate) => candidate.id === callId);
+    if (
+      !call ||
+      call.endedAt ||
+      s.state !== "in_call" ||
+      s.currentCallId !== callId
+    )
+      throw conflict();
+    const balance = Number.isSafeInteger(s.atm?.balance)
+      ? s.atm.balance
+      : initialAtmBalance;
+    if (amount > balance)
+      throw new AppError(
+        "INSUFFICIENT_FUNDS",
+        "餘額不足，請調整操作金額。",
+        409,
+      );
+    const balanceAfter = balance - amount;
+    const text =
+      action === "transfer"
+        ? `【ATM 操作】使用者已匯款 ${amountText(amount)} 至收款帳號末四碼 ${recipientLast4}；操作後餘額 ${amountText(balanceAfter)}。`
+        : `【ATM 操作】使用者已提款 ${amountText(amount)}；操作後餘額 ${amountText(balanceAfter)}。`;
+    const message = {
+      id: randomUUID(),
+      callId,
+      clientMessageId: clientActionId,
+      speaker: "user",
+      source: "atm",
+      action,
+      amount,
+      recipientLast4,
+      balanceAfter,
+      text,
+      sequence: s.messages.length + 1,
+      createdAt: now(),
+    };
+    s.atm = { balance: balanceAfter };
+    s.messages.push(message);
+    this.store.save(s);
+    this.media?.observeUserMessage(id, callId, message, ownerId);
+    return { messageId: message.id, balance: balanceAfter };
   }
   closeCall(id, callId, reason = "user", ownerId = defaultWorkspaceId) {
     let s = this.store.get(id, ownerId);
@@ -362,6 +449,32 @@ export class Engine {
         ? { assignmentId: a.id, persona: persona(a.personaId) }
         : null,
       currentCallId: s.currentCallId,
+      atm: {
+        balance: Number.isSafeInteger(s.atm?.balance)
+          ? s.atm.balance
+          : initialAtmBalance,
+        transactions: s.messages
+          .filter((message) => message.source === "atm")
+          .map(
+            ({
+              id,
+              callId,
+              action,
+              amount,
+              recipientLast4,
+              balanceAfter,
+              createdAt,
+            }) => ({
+              id,
+              callId,
+              action,
+              amount,
+              recipientLast4,
+              balanceAfter,
+              createdAt,
+            }),
+          ),
+      },
       calls: s.calls.map((c) => ({
         id: c.id,
         ordinal: c.ordinal,
@@ -398,14 +511,22 @@ export class Engine {
               partial,
               playback,
               late,
+              action,
+              amount,
+              recipientLast4,
+              balanceAfter,
             }) => ({
               id,
               speaker,
               text,
               createdAt,
               sequence,
+              ...(source ? { source } : {}),
               ...(source === "voice"
-                ? { source, voiceId, fragmentSpans, partial, playback, late }
+                ? { voiceId, fragmentSpans, partial, playback, late }
+                : {}),
+              ...(source === "atm"
+                ? { action, amount, recipientLast4, balanceAfter }
                 : {}),
             }),
           ),
