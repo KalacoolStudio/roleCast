@@ -15,5 +15,5 @@
 ## 3. Live rollout and acceptance
 
 - [x] 3.1 Review and apply a plan that adds the restricted gateway without replacing the VM or data disk; verify the deployed gateway reaches the private upstream using operator authentication and record the generated HTTPS URL.
-- [ ] 3.2 Merge a passing release through the existing main workflow; verify schema-5 migration, backup and retained records, and establish operator ownership of legacy data before anonymous access.
+- [x] 3.2 Merge a passing release through the existing main workflow; verify schema-5 migration, backup and retained records, and establish operator ownership of legacy data before anonymous access.
 - [ ] 3.3 Apply the user's selected gateway access mode and verify the real public HTTPS frontend, API, secure workspace cookies, two-browser isolation, streaming/voice transport and blocked direct VM ports; record policy, commit, URL and evidence, and remove temporary resources.
