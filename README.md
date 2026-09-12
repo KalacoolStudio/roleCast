@@ -106,18 +106,18 @@ just tunnel
 2. 填寫名稱、簡介、目標、停止條件與回合上限。新增劇本會預填目前防詐劇本的 Mastermind／Judge 指引，可直接修改成其他演練。
 3. 分別編輯三個角色的 prompts：
 
-| 欄位                 | 用途                                   |
-| -------------------- | -------------------------------------- |
-| `prompts.mastermind` | 通話間安排角色、任務與整場進度         |
-| `prompts.judge`      | 通話中的 Watch，以及結束後的 Recap     |
-| `prompts.reporter`   | 依證據整理最終報告，設定回饋重點與語氣 |
+| 欄位                 | 用途                                         |
+| -------------------- | -------------------------------------------- |
+| `prompts.mastermind` | 通話間安排角色、任務與整場進度               |
+| `prompts.judge`      | 通話中的 Watch，以及結束後的 Recap           |
+| `prompts.reporter`   | 依使用者證據整理最終報告，設定回饋重點與語氣 |
 
 4. 按「儲存劇本」，再按「使用此劇本」回到開始畫面建立 drill。每次儲存增加 plot 版本；如果其他分頁已更新，系統保留草稿並提示重新載入。
 5. 可「匯出 JSON」保存或分享定義；「匯入 JSON」先開啟草稿，儲存時建立新 plot，不覆寫原劇本。範例：[客服溝通 plot](examples/customer-support.plot.json)。
 
 自訂 prompts 只設定角色行為、評估重點與語氣，不能重新定義輸出欄位。固定 system instruction、輸出 schema 與允許引用的 ID 由程式產生；自訂指引與對話放在較低優先權的輸入資料中。Persona 的基本對話 prompt 由系統管理，Mastermind 透過人設與任務讓不同 plot 有不同對話風格。
 
-Mastermind 的每次指派只包含 Persona 任務與明確共享的使用者訊息；系統不再保存或傳遞固定事實與評估判準。Persona 對任務及自身歷史以外的細節應表示不確定。Judge 依劇本的 Judge prompt、停止條件及本通證據決定是否收線；Reporter 則依目標、逐字稿與 Recap 自行整理報告面向。
+Mastermind 的每次指派只包含 Persona 任務與明確共享的使用者訊息；系統不再保存或傳遞固定事實與評估判準。Persona 對任務及自身歷史以外的細節應表示不確定。Judge 依劇本的 Judge prompt、停止條件及本通證據決定是否收線；Reporter 則依目標、逐字稿與 Recap 自行整理只針對使用者表現的報告面向。Persona 訊息只供理解使用者面對的情境，不會成為 Reporter 的評估對象或引用證據。
 
 例如自訂 Judge prompt 提到 `shouldStop`／`confidence`，系統仍要求既有 `stop`、`reason` 與 `evidenceIds`；`stop=true` 至少要引用一則實際訊息。Mastermind 的人設限制放入既有 personality、任務放入 goal，不新增 capabilities 或 assignment 欄位。驗證失敗時，系統提供錯誤類別與欄位位置，最多重試一次。每次輸出預算 4,000 tokens，只有截斷時重試提高至 8,000；嚴格格式仍不能取代對證據內容的判斷。
 

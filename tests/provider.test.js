@@ -197,6 +197,60 @@ it("isolates custom instructions from the fixed system contract and sends strict
   expect(body.messages[0].content).not.toContain("MM_PRIVATE");
 });
 
+it("keeps Reporter focused on participant behavior despite custom Persona-review instructions", async () => {
+  const report = {
+    summary: "你有清楚表達自己的判斷。",
+    dimensions: [
+      {
+        name: "表達",
+        assessment: "你提出了具體理由。",
+        evidenceIds: ["msg-user"],
+      },
+    ],
+    strengths: [],
+    improvements: [],
+    insufficientEvidence: false,
+    uncertainties: [],
+  };
+  const { config, requests } = await provider((_req, res) =>
+    completion(res, JSON.stringify(report)),
+  );
+  const prompt = effectivePrompts({
+    prompts: {
+      mastermind: "MM_PRIVATE",
+      judge: "JJ_PRIVATE",
+      reporter: "請評估並改善 Persona 的話術品質。",
+    },
+  }).report;
+  const context = {
+    goal: "評估使用者的表達能力",
+    messages: [
+      { id: "msg-user", speaker: "user", text: "我會先查證。" },
+      { id: "msg-persona", speaker: "persona", text: "請立刻操作。" },
+    ],
+    recaps: [],
+  };
+
+  await expect(
+    new Agents(config).run("report", context, undefined, prompt),
+  ).resolves.toEqual(report);
+  const body = requests[0].body;
+  expect(body.messages[0].content).toContain("唯一評估對象是受測者");
+  expect(body.messages[0].content).toContain("不得評估、稱讚或批評 Persona");
+  expect(body.messages[0].content).not.toContain("請評估並改善 Persona");
+  expect(JSON.parse(body.messages[1].content).authorGuidance).toContain(
+    "請評估並改善 Persona",
+  );
+  const reportSchema =
+    body.response_format.json_schema.schema.properties.result;
+  expect(
+    reportSchema.properties.dimensions.items.properties.evidenceIds.items.enum,
+  ).toEqual(["msg-user"]);
+  expect(
+    reportSchema.properties.strengths.items.properties.evidenceIds.items.enum,
+  ).toEqual(["msg-user"]);
+});
+
 it("builds a strict root object, valid nested anyOf and context-bound reference enums", () => {
   const context = {
     plot: {},
@@ -222,6 +276,15 @@ it("builds a strict root object, valid nested anyOf and context-bound reference 
     "msg-user",
     "msg-persona",
   ]);
+  const report = outputContract("report", {
+    messages: context.messages,
+  }).json.properties.result;
+  expect(
+    report.properties.dimensions.items.properties.evidenceIds.items.enum,
+  ).toEqual(["msg-user"]);
+  expect(
+    report.properties.improvements.items.properties.evidenceIds.items.enum,
+  ).toEqual(["msg-user"]);
   expect(watch.properties).not.toHaveProperty("criterionIds");
   const recap = outputContract("recap", { messages: [], endReason: "user" })
     .json.properties.result;

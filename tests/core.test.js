@@ -310,6 +310,42 @@ describe("context and contract boundaries", () => {
     };
     expect(() => validateResult("report", report, context)).toThrow();
   });
+  it("rejects Persona messages as Reporter evidence", () => {
+    const context = {
+      messages: [
+        { id: "user-evidence", speaker: "user", text: "我會先查證。" },
+        {
+          id: "persona-evidence",
+          speaker: "persona",
+          text: "請立刻操作。",
+        },
+      ],
+    };
+    const report = {
+      summary: "受測者表現摘要",
+      dimensions: [
+        {
+          name: "Persona 話術",
+          assessment: "Persona 的引導清楚。",
+          evidenceIds: ["persona-evidence"],
+        },
+      ],
+      strengths: [],
+      improvements: [],
+      uncertainties: [],
+      insufficientEvidence: false,
+    };
+
+    expect(() => validateResult("report", report, context)).toThrow(
+      "Invalid evidence reference",
+    );
+    report.dimensions[0] = {
+      name: "查證行為",
+      assessment: "使用者表示會先查證。",
+      evidenceIds: ["user-evidence"],
+    };
+    expect(() => validateResult("report", report, context)).not.toThrow();
+  });
   it("keeps private prompts out of API view and limits Judge/Persona inputs", async () => {
     const h = make();
     const { id, callId } = await ready(h);

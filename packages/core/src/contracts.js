@@ -115,7 +115,10 @@ export function validateReferences(value, validIds) {
 export function validateResult(kind, value, context) {
   const result = schemas[kind].parse(value);
   const messages = context.messages || [];
-  validateReferences(result, new Set(messages.map((m) => m.id)));
+  const validEvidence = messages.filter(
+    (message) => kind !== "report" || message.speaker === "user",
+  );
+  validateReferences(result, new Set(validEvidence.map((m) => m.id)));
   if (kind === "plan" && result.action !== "finish") {
     const sourceIds = new Set(
       messages.filter((m) => m.speaker === "user").map((m) => m.id),
