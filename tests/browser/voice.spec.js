@@ -238,6 +238,25 @@ test("Judge stops voice playback and report opens the exact voice evidence", asy
   await expect(page.locator(anchor).locator("..")).toHaveAttribute("open", "");
   await expect(page.locator(".call-end")).toHaveText("本通演練已結束");
 });
+test("mutual farewell makes Judge hang up without a manual click", async ({
+  page,
+}) => {
+  await start(page);
+  await page.getByRole("button", { name: "用語音接通" }).click();
+  await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
+  await control(page.request, {
+    action: "say",
+    speaker: "persona",
+    text: "好，那先這樣，感謝您的來電。",
+  });
+  await control(page.request, {
+    action: "say",
+    text: "拜拜",
+  });
+  await expect(page.locator(".report")).toBeVisible();
+  await expect(page.locator(".call-end")).toHaveText("本通演練已結束");
+  await released(page);
+});
 test("permission denial creates no provider; retry succeeds; reload releases voice without reacquiring", async ({
   page,
 }) => {

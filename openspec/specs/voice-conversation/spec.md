@@ -42,7 +42,7 @@ Client capture SHALL combine browser echo cancellation and noise suppression wit
 
 ### Requirement: Natural voice with concurrent evaluation
 
-In voice mode, Persona speech SHALL play while Judge evaluates accumulated evidence independently. A valid stop SHALL prevent further application playback and new microphone submission as soon as the client receives the stop notification. The application SHALL NOT represent speech heard before a stop decision as having been blocked.
+In voice mode, Persona speech SHALL play while Judge evaluates accumulated evidence independently. A valid stop SHALL prevent further application playback and new microphone submission as soon as the client receives the stop notification. The application SHALL NOT represent speech heard before a stop decision as having been blocked. An explicit participant farewell, or a brief acknowledgement after the Persona clearly closes the conversation, SHALL end the current call without requiring a scoring criterion to be satisfied.
 
 #### Scenario: Judge is still evaluating
 - **WHEN** a voice checkpoint is being evaluated and the call is active
@@ -51,6 +51,10 @@ In voice mode, Persona speech SHALL play while Judge evaluates accumulated evide
 #### Scenario: Stop during playback
 - **WHEN** Judge ends the current voice call while audio is queued or playing
 - **THEN** the client stops playback, clears queued audio, disables capture, and ignores later output from that voice attempt
+
+#### Scenario: Mutual spoken farewell
+- **WHEN** the Persona clearly closes the conversation and the participant says goodbye or acknowledges that closing
+- **THEN** Judge ends the call once, releases voice input and playback, and proceeds to Recap and the next planned call
 
 ### Requirement: Server ownership and private context
 

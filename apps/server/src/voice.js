@@ -36,6 +36,63 @@ const ended = (item) =>
 const RELAY_HIGH_WATER_BYTES = 384000;
 const EARLY_AUDIO_MAX_BYTES = 192000;
 
+const normalizeClosingSpeech = (text) =>
+  text
+    .normalize("NFKC")
+    .replace(/[\s，。！？、,.!?；;：:“”"'「」『』（）()…—-]/gu, "");
+const participantEndedCall = (text) => {
+  if (/(?:不要|別|不能|不可以|先別|請勿|不).{0,6}(?:掛斷|結束)/u.test(text))
+    return false;
+  return (
+    (text.length <= 32 &&
+      /(?:先這樣(?:吧|了|囉)?|再見|拜拜|掰掰)(?:謝謝(?:你|您)?)?$/u.test(
+        text,
+      )) ||
+    /(?:(?:請|麻煩|可以|幫我|我要|我想).{0,8})?(?:掛斷(?:吧|了)?|結束(?:這通)?(?:通話|電話))(?:謝謝)?$/u.test(
+      text,
+    )
+  );
+};
+const personaEndedCall = (text) => {
+  if (
+    /(?:如何|怎麼|要不要|是否|請說|說明).{0,12}(?:再見|拜拜|掰掰)$/u.test(text)
+  )
+    return false;
+  return /(?:先這樣(?:吧|了|囉)?|再見|拜拜|掰掰|感謝您(?:的)?(?:來電|配合)|謝謝您(?:的)?(?:來電|配合)|後續.{0,24}(?:再)?(?:與您)?聯繫|祝您(?:一切)?(?:順心|愉快|平安))$/u.test(
+    text,
+  );
+};
+const closingAcknowledgement = (text) =>
+  /^(?:好|好的|好啊|可以|嗯好|謝謝|謝謝你|謝謝您|好謝謝|好的謝謝)$/u.test(text);
+
+/** Return the participant evidence that establishes an explicit call boundary. */
+export function conversationClosure(messages) {
+  const spoken = messages.filter(
+    (message) =>
+      (message.speaker === "user" || message.speaker === "persona") &&
+      message.source !== "atm" &&
+      typeof message.text === "string" &&
+      message.text.trim(),
+  );
+  let userIndex = spoken.findLastIndex((message) => message.speaker === "user");
+  if (userIndex < 0) return null;
+
+  const evidence = spoken[userIndex];
+  const userParts = [];
+  while (userIndex >= 0 && spoken[userIndex].speaker === "user")
+    userParts.unshift(spoken[userIndex--].text);
+  const userText = normalizeClosingSpeech(userParts.join(""));
+  if (participantEndedCall(userText)) return evidence.id;
+
+  const personaParts = [];
+  while (userIndex >= 0 && spoken[userIndex].speaker === "persona")
+    personaParts.unshift(spoken[userIndex--].text);
+  const personaText = normalizeClosingSpeech(personaParts.join(""));
+  return personaEndedCall(personaText) && closingAcknowledgement(userText)
+    ? evidence.id
+    : null;
+}
+
 /** Bound even injected providers that ignore AbortSignal; never expose their errors. */
 export function bounded(run, signal, milliseconds, code = "VOICE_TIMEOUT") {
   return new Promise((resolve, reject) => {
@@ -483,7 +540,42 @@ export class VoiceCoordinator {
     if (!final) this.judge(item);
     return messages;
   }
+  closeOnConversationClosure(item) {
+    if (item.pendingUser <= item.checkedUser) return false;
+    const current = this.current(item);
+    if (!current) return false;
+    const context = roleContext("watch", current.s, current.call);
+    const evidenceId = conversationClosure(context.messages);
+    const evidence = context.messages.find(
+      (message) => message.id === evidenceId,
+    );
+    if (!evidence || evidence.sequence <= item.checkedUser) return false;
+    const through = item.pendingUser;
+    const result = validateResult(
+      "watch",
+      {
+        stop: true,
+        reason: "雙方已明確結束對話。",
+        evidenceIds: [evidenceId],
+      },
+      context,
+    );
+    current.s.watches.push({
+      ...result,
+      id: randomUUID(),
+      callId: item.callId,
+      voiceId: item.id,
+      messageId: evidenceId,
+      throughSequence: through,
+    });
+    this.engine.store.save(current.s);
+    item.checkedUser = through;
+    this.engine.closeCall(item.sessionId, item.callId, "judge", item.ownerId);
+    return true;
+  }
   judge(item) {
+    if (this.closeOnConversationClosure(item))
+      return item.judging || Promise.resolve();
     if (item.judging) return item.judging;
     item.judging = (async () => {
       while (
@@ -491,6 +583,7 @@ export class VoiceCoordinator {
         item.pendingUser > item.checkedUser &&
         this.current(item)
       ) {
+        if (this.closeOnConversationClosure(item)) return;
         const { s, call } = this.current(item);
         const context = roleContext("watch", s, call);
         const through = item.pendingUser;
@@ -517,8 +610,9 @@ export class VoiceCoordinator {
           id: randomUUID(),
           callId: item.callId,
           voiceId: item.id,
-          messageId: context.messages.filter((m) => m.speaker === "user").at(-1)
-            ?.id,
+          messageId:
+            result.evidenceIds.at(-1) ||
+            context.messages.filter((m) => m.speaker === "user").at(-1)?.id,
           throughSequence: through,
         });
         this.engine.store.save(latest);

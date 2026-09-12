@@ -1,6 +1,9 @@
 import { afterEach, expect, it } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
-import { VoiceCoordinator } from "../apps/server/src/voice.js";
+import {
+  conversationClosure,
+  VoiceCoordinator,
+} from "../apps/server/src/voice.js";
 import { harness, ready, until, deferred } from "./support/fixtures.js";
 import { fakeLive, fakeSocket, transcript } from "./support/voice.js";
 const cleanup = [];
@@ -12,6 +15,49 @@ const keep = {
   reason: "需更多資料",
   evidenceIds: [],
 };
+it("recognizes an explicit farewell without treating a bare acknowledgement as closure", () => {
+  const persona = {
+    id: "persona-close",
+    speaker: "persona",
+    source: "voice",
+    text: "好，那先這樣，感謝您的來電。",
+  };
+  expect(
+    conversationClosure([
+      { ...persona, text: "請問這樣可以嗎？" },
+      { id: "user-ok", speaker: "user", source: "voice", text: "好" },
+    ]),
+  ).toBeNull();
+  expect(
+    conversationClosure([
+      { ...persona, text: "請說明你會如何跟對方說再見？" },
+      { id: "user-ok", speaker: "user", source: "voice", text: "好" },
+    ]),
+  ).toBeNull();
+  expect(
+    conversationClosure([
+      {
+        id: "user-continue",
+        speaker: "user",
+        source: "voice",
+        text: "先別掛斷",
+      },
+    ]),
+  ).toBeNull();
+  expect(
+    conversationClosure([
+      persona,
+      { id: "user-bye-1", speaker: "user", source: "voice", text: "拜" },
+      { id: "user-bye-2", speaker: "user", source: "voice", text: "拜" },
+    ]),
+  ).toBe("user-bye-2");
+  expect(
+    conversationClosure([
+      persona,
+      { id: "user-ok", speaker: "user", source: "voice", text: "好的" },
+    ]),
+  ).toBe("user-ok");
+});
 async function setup({ agents, provider, limits, voiceFirst = false } = {}) {
   const h = harness(agents),
     client = fakeLive(provider);
@@ -114,6 +160,49 @@ it("coalesces new evidence behind a running Judge without blocking audio or star
   expect(calls[1].messages.filter((m) => m.source === "voice")).toHaveLength(6);
   expect(calls[1].voiceEvidence).toContain("不一定是完整回答");
   expect(h.agents.calls.filter((c) => c.kind === "reply")).toHaveLength(1);
+});
+it("ends a voice call after a mutual farewell without requiring a scoring criterion", async () => {
+  const pendingJudge = deferred();
+  const h = await setup({
+    voiceFirst: true,
+    agents: {
+      plan: () => ({
+        action: "create",
+        persona: {
+          id: "farewell-persona",
+          name: "林小姐",
+          role: "客服",
+          personality: "有禮",
+        },
+        goal: "完成通話後自然收尾。",
+        sharedMessageIds: [],
+      }),
+      watch: () => pendingJudge.promise,
+    },
+  });
+  const { item, connection, socket } = await h.attach();
+  connection.emit(transcript("我先想一下", "user", 0));
+  h.media.checkpoint(item);
+  await until(() => h.agents.calls.some((call) => call.kind === "watch"));
+  connection.emit(transcript("好，那先這樣，感謝您的來電。", "persona", 80));
+  connection.emit(transcript("拜拜", "user", 160));
+  h.media.checkpoint(item);
+  await until(() => !!h.store.get(h.id).calls[0].endedAt);
+  await item.stopping;
+  const state = h.store.get(h.id);
+  expect(state.calls[0].endReason).toBe("judge");
+  expect(state.watches[0]).toMatchObject({
+    stop: true,
+    reason: "雙方已明確結束對話。",
+  });
+  expect(state.watches[0].evidenceIds).toEqual([
+    state.messages.find((message) => message.text === "拜拜").id,
+  ]);
+  expect(h.agents.calls.filter((call) => call.kind === "watch")).toHaveLength(
+    1,
+  );
+  expect(socket.sent.some((event) => event.type === "stopped")).toBe(true);
+  expect(socket.readyState).toBe(3);
 });
 it("sends a completed ATM action to the active Judge immediately and only deducts it once", async () => {
   const contexts = [];
