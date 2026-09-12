@@ -12,7 +12,7 @@ export const voiceError = (code = "VOICE_UNAVAILABLE") =>
   new AppError(
     code,
     {
-      VOICE_UNAVAILABLE: "語音連線無法使用，請改用文字或稍後重新開啟語音。",
+      VOICE_UNAVAILABLE: "語音連線無法使用，請稍後重新開啟語音。",
       VOICE_AUTH: "語音模型驗證失敗，請檢查後端 OpenAI 設定。",
       VOICE_PROTOCOL: "語音資料格式不正確，連線已停止。",
       VOICE_BACKPRESSURE: "語音連線跟不上播放或收音速度，請重新開啟語音。",
@@ -31,6 +31,8 @@ const failureCode = (error) =>
         : "VOICE_UNAVAILABLE";
 const ended = (item) =>
   ["closed", "failed", "interrupted"].includes(item.status);
+const RELAY_HIGH_WATER_BYTES = 384000;
+const EARLY_AUDIO_MAX_BYTES = 192000;
 
 /** Bound even injected providers that ignore AbortSignal; never expose their errors. */
 export function bounded(run, signal, milliseconds, code = "VOICE_TIMEOUT") {
@@ -320,9 +322,9 @@ export class VoiceCoordinator {
     });
     if (
       data.type !== "stopped" &&
-      item.socket.bufferedAmount + Buffer.byteLength(payload) > 32768
+      item.socket.bufferedAmount + Buffer.byteLength(payload) >
+        RELAY_HIGH_WATER_BYTES
     ) {
-      this.stop(item, "VOICE_BACKPRESSURE");
       return;
     }
     item.socket.send(payload, (error) => {
@@ -386,7 +388,11 @@ export class VoiceCoordinator {
       bytes.length > 5760
     )
       throw voiceError("VOICE_PROTOCOL");
-    item.live.appendAudio(bytes);
+    try {
+      item.live.appendAudio(bytes);
+    } catch (error) {
+      if (error?.code !== "LIVE_BACKPRESSURE") throw error;
+    }
   }
   receive(item, event) {
     if (item.frozen || !this.current(item)) return;
@@ -402,11 +408,13 @@ export class VoiceCoordinator {
       const bytes = decodeAudio(event.delta);
       if (item.status === "starting") {
         item.earlyAudio ||= [];
-        if (
-          item.earlyAudio.reduce((n, v) => n + v.length, bytes.length) > 12000
+        while (
+          item.earlyAudio.length &&
+          item.earlyAudio.reduce((n, v) => n + v.length, bytes.length) >
+            EARLY_AUDIO_MAX_BYTES
         )
-          this.stop(item, "VOICE_BACKPRESSURE");
-        else item.earlyAudio.push(bytes);
+          item.earlyAudio.shift();
+        if (bytes.length <= EARLY_AUDIO_MAX_BYTES) item.earlyAudio.push(bytes);
       } else this.output(item, bytes);
     } else if (
       event.type === "session.delegation.created" &&
@@ -428,8 +436,7 @@ export class VoiceCoordinator {
   }
   output(item, bytes) {
     if (item.frozen || item.socket?.readyState !== 1) return;
-    if (item.socket.bufferedAmount + bytes.length > 24000) {
-      this.stop(item, "VOICE_BACKPRESSURE");
+    if (item.socket.bufferedAmount + bytes.length > RELAY_HIGH_WATER_BYTES) {
       return;
     }
     item.socket.send(bytes, (error) => {

@@ -1,5 +1,27 @@
 import { roleContext } from "./agents.js";
 
+const builtInVoices = [
+  "marin",
+  "cedar",
+  "coral",
+  "sage",
+  "verse",
+  "alloy",
+  "ash",
+  "ballad",
+  "echo",
+  "beacon",
+  "bossa",
+  "cinder",
+  "shimmer",
+];
+
+export function voiceForPersona(session, call, preferred = "marin") {
+  const voices = [preferred, ...builtInVoices.filter((v) => v !== preferred)];
+  const index = session.personas.findIndex((p) => p.id === call.personaId);
+  return voices[Math.max(0, index) % voices.length];
+}
+
 /** The Live conversation prompt never inherits the backend's JSON-only contract. */
 export function liveSessionOptions(session, call, voice = "marin") {
   const { persona, goal, facts, sharedMessages, messages, opening } =
@@ -22,7 +44,7 @@ export function liveSessionOptions(session, call, voice = "marin") {
       });
   }
   return {
-    voice,
+    voice: voiceForPersona(session, call, voice),
     store: false,
     delegation: { type: "client" },
     input: input.slice(-128),

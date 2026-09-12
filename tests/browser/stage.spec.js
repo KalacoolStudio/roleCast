@@ -1,6 +1,17 @@
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
+async function acceptThroughApi(page) {
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  const id = new URL(page.url()).hash.slice(1);
+  const drill = await (await page.request.get(`/api/drills/${id}`)).json();
+  const response = await page.request.post(`/api/drills/${id}/calls/accept`, {
+    data: { assignmentId: drill.pendingCall.assignmentId },
+  });
+  expect(response.ok()).toBe(true);
+  return (await response.json()).callId;
+}
+
 test("live stage follows real calls, retains persona identity, and restores without replay", async ({
   page,
 }, testInfo) => {
@@ -29,8 +40,8 @@ test("live stage follows real calls, retains persona identity, and restores with
     path: testInfo.outputPath("stage-desktop-awaiting.png"),
     fullPage: true,
   });
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await acceptThroughApi(page);
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".stage-character.judge")).toHaveAttribute(
     "data-position",
     "watch",
@@ -54,14 +65,14 @@ test("live stage follows real calls, retains persona identity, and restores with
   const after = await (await page.request.get(`/api/drills/${id}`)).json();
   expect(after.stage.lastEventSequence).toBe(before.stage.lastEventSequence);
   await page.getByRole("button", { name: "掛斷本通" }).click();
-  await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
   await expect(page.locator(".stage-caption")).toContainText("再次上場");
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-sprite",
     sprite,
   );
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await acceptThroughApi(page);
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await page.getByRole("button", { name: "結束整場演練" }).click();
   await expect(page.locator(".report")).toBeVisible();
   await expect(page.locator(".stage-character.persona")).toHaveCount(0);
@@ -69,7 +80,7 @@ test("live stage follows real calls, retains persona identity, and restores with
   expect(errors).toEqual([]);
 });
 
-test("mobile reduced motion keeps a compact role summary while typing", async ({
+test("mobile reduced motion keeps the voice-only stage usable", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -77,8 +88,8 @@ test("mobile reduced motion keeps a compact role summary while typing", async ({
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
   await expect(page.getByLabel("減少動畫")).toBeChecked();
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await acceptThroughApi(page);
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-walking",
     "false",
@@ -91,11 +102,7 @@ test("mobile reduced motion keeps a compact role summary while typing", async ({
     path: testInfo.outputPath("stage-mobile.png"),
     fullPage: true,
   });
-  await page.getByLabel("你的回覆").fill("我會先確認資料來源");
-  await expect(page.locator(".stage-compact-summary")).toBeVisible();
-  await expect(page.locator(".stage-compact-summary")).toContainText(
-    "Judge 監看中",
-  );
+  await expect(page.locator(".voice-panel")).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -105,10 +112,6 @@ test("mobile reduced motion keeps a compact role summary while typing", async ({
     path: testInfo.outputPath("stage-mobile-typing.png"),
     fullPage: true,
   });
-  await page.getByRole("button", { name: /送出/ }).focus();
-  await page.keyboard.press("Enter");
-  await expect(page.locator(".message.user")).toHaveCount(1);
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
   await page.getByRole("button", { name: "結束整場演練" }).click();
   await expect(page.locator(".report")).toBeVisible();
 });
@@ -119,11 +122,11 @@ test("SSE fallback catches up once, then reconnects without extra calls", async 
   await page.route("**/events/stream*", (route) => route.abort());
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
-  await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
   await expect(page.locator(".stage-caption")).toContainText("備援連線");
   const id = await page.evaluate(() => location.hash.slice(1));
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await acceptThroughApi(page);
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await page.unroute("**/events/stream*");
   await expect(page.locator(".stage-caption")).toContainText("即時同步", {
     timeout: 7000,
@@ -142,8 +145,8 @@ test("a legacy snapshot without stage metadata remains usable", async ({
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await acceptThroughApi(page);
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   const id = await page.evaluate(() => location.hash.slice(1));
   await page.route(`**/api/drills/${id}`, async (route) => {
     const response = await route.fetch();
@@ -156,7 +159,7 @@ test("a legacy snapshot without stage metadata remains usable", async ({
     "data-position",
     "call",
   );
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".stage-activity li")).toHaveCount(0);
   await page.getByRole("button", { name: "結束整場演練" }).click();
   await expect(page.locator(".report")).toBeVisible();
@@ -196,13 +199,26 @@ test("walk sprites change frames while Persona and Judge actually move, then ret
   await expect(persona).toHaveAttribute("data-position", "call");
   await expect(persona).toHaveAttribute("data-walking", "false");
   await expect(persona).toHaveAttribute("data-frame", "0");
-  await page.getByRole("button", { name: /接通對話/ }).click();
+  await acceptThroughApi(page);
   await expect(judge).toHaveAttribute("data-walking", "true");
   await page.screenshot({ path: testInfo.outputPath("judge-walking.png") });
   await expect(judge).toHaveAttribute("data-walking", "false");
   await expect(judge).toHaveAttribute("data-frame", "0");
   await page.getByRole("button", { name: "掛斷本通" }).click();
-  await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
+  await expect(persona).toHaveAttribute("data-walking", "true");
+  await expect(persona).toHaveAttribute("data-facing", "left");
+  const leavingLayers = await persona.evaluate((element) => {
+    const window = element.querySelector(".sprite-window");
+    const sheet = element.querySelector("img");
+    return {
+      opacity: getComputedStyle(element).opacity,
+      windowFilter: getComputedStyle(window).filter,
+      sheetFilter: getComputedStyle(sheet).filter,
+    };
+  });
+  expect(leavingLayers).toMatchObject({ opacity: "1", sheetFilter: "none" });
+  expect(leavingLayers.windowFilter).toContain("drop-shadow");
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
   await expect(page.locator(".stage-canvas")).toHaveAttribute(
     "data-phase",
     "awaiting_call",

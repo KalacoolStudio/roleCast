@@ -80,7 +80,26 @@ async function released(page) {
     )
     .toBe(true);
 }
-test("voice-first speaks and saves speech automatically, mutes, and returns to the same text call", async ({
+test("voice-only home blocks drills when voice is unavailable", async ({
+  page,
+}) => {
+  await page.route("**/api/capabilities", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        voice: { available: false, reason: "NOT_CONFIGURED" },
+      }),
+    }),
+  );
+  await page.goto("/");
+  await expect(
+    page.getByText("語音尚未設定，請在 .env 設定 API_KEY 並重新啟動服務。"),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /開始演練/ })).toBeDisabled();
+  await expect(page.getByText("即時語音互動").first()).toBeVisible();
+  await expect(page.getByText("文字 / 語音互動")).toHaveCount(0);
+});
+test("voice-only calls save speech automatically and keep text controls absent", async ({
   page,
   request,
 }) => {
@@ -88,13 +107,17 @@ test("voice-first speaks and saves speech automatically, mutes, and returns to t
     route.fulfill({ json: { deploymentMode: "gcp" } }),
   );
   await start(page);
+  await expect(
+    page.getByRole("button", { name: "接通對話", exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.locator(".voice-panel small")).toContainText(
     "逐字稿保存在 GCP，並與授權使用者共用",
   );
   await expect(page.locator(".voice-panel small")).not.toContainText("本機");
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
-  await expect(page.getByLabel("你的回覆")).toBeDisabled();
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "改用文字" })).toHaveCount(0);
   await expect(page.locator(".voice-message.persona > p")).toHaveText(
     "你好，請直接用語音和我聊聊。",
   );
@@ -115,33 +138,30 @@ test("voice-first speaks and saves speech automatically, mutes, and returns to t
   await page.getByRole("button", { name: "麥克風靜音", exact: true }).click();
   await expect(page.getByText("麥克風已靜音", { exact: true })).toBeVisible();
   const frames = (await stats(request)).connections.at(-1).frames;
-  await expect
-    .poll(async () => (await stats(request)).connections.at(-1).frames)
-    .toBeGreaterThan(frames + 2);
+  await page.waitForTimeout(400);
+  expect((await stats(request)).connections.at(-1).frames).toBeLessThanOrEqual(
+    frames + 1,
+  );
   expect(await page.evaluate(() => window.voiceTest.tracks[0].enabled)).toBe(
     false,
   );
   await page.getByRole("button", { name: "取消靜音" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
-  await page.getByRole("button", { name: "改用文字" }).click();
+  await expect
+    .poll(async () => (await stats(request)).connections.at(-1).frames)
+    .toBeGreaterThan(frames + 1);
+  await page.getByRole("button", { name: "掛斷本通" }).click();
   await released(page);
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
   await expect(page.locator(".call")).toHaveCount(1);
-  await page.getByLabel("你的回覆").fill("文字繼續");
-  await page.getByRole("button", { name: /送出/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
-  await expect(page.locator(".message.user").last()).toContainText("文字繼續");
 });
-test("composer activation continues history, Judge stops playback and report opens the exact voice evidence", async ({
+test("Judge stops voice playback and report opens the exact voice evidence", async ({
   page,
   request,
 }) => {
   await start(page);
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
-  await page.getByRole("button", { name: "開啟語音" }).click();
+  await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
-  expect((await stats(request)).connections.at(-1).greetings).toBe(0);
+  expect((await stats(request)).connections.at(-1).greetings).toBe(1);
   await control(request, { action: "play" });
   await expect
     .poll(() => page.evaluate(() => window.voiceTest.outputs))
@@ -179,12 +199,13 @@ test("permission denial creates no provider; retry succeeds; reload releases voi
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "開啟語音" })).toBeEnabled();
   expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(0);
   expect((await stats(request)).attempts).toBe(before + 1);
   expect((await stats(request)).connections.at(-1).disconnected).toBe(true);
 });
-test("provider loss offers text; a fresh explicit attempt can end through Persona delegation", async ({
+test("provider loss offers voice retry; a fresh attempt can end through Persona delegation", async ({
   page,
   request,
 }) => {
@@ -194,8 +215,8 @@ test("provider loss offers text; a fresh explicit attempt can end through Person
   await control(request, { action: "disconnect" });
   await expect(page.getByRole("alert")).toContainText("語音連線無法使用");
   await released(page);
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
-  await page.getByRole("button", { name: "開啟語音" }).click();
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
+  await page.getByRole("button", { name: "重新開啟語音" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await control(request, { action: "say", text: "請稍後聯繫。" });
   await control(request, { action: "delegate" });

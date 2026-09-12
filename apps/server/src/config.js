@@ -87,7 +87,7 @@ export function liveConfiguration(values) {
     const config = {
       apiKey: values.API_KEY,
       baseURL: values.OPENAI_BASE_URL || "https://api.openai.com/v1",
-      maxBufferedBytes: 32768,
+      maxBufferedBytes: 262144,
     };
     createGptLiveClient(config); // Validates locally; no SDK construction or network.
     const voice = values.LIVE_VOICE || "marin";

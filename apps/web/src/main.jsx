@@ -63,8 +63,7 @@ function App() {
     [drill, setDrill] = useState(null);
   const [plotId, setPlotId] = useState("anti-fraud"),
     [background, setBackground] = useState("");
-  const [text, setText] = useState(""),
-    [error, setError] = useState(""),
+  const [error, setError] = useState(""),
     [acting, setActing] = useState(false);
   const [stageEvents, setStageEvents] = useState([]);
   const [stageReset, setStageReset] = useState(0);
@@ -87,7 +86,6 @@ function App() {
     setId(next);
     location.hash = next;
     setDrill(null);
-    setText("");
     setError("");
     setShowHistory(false);
   }, []);
@@ -194,39 +192,6 @@ function App() {
       }
       return call.id;
     });
-  const send = (event) => {
-    event.preventDefault();
-    if (!text.trim() || !call || voiceMode) return;
-    action(async () => {
-      const key = "role-cast-pending";
-      let pending;
-      try {
-        pending = JSON.parse(sessionStorage.getItem(key));
-      } catch {
-        /* no pending message */
-      }
-      if (
-        !pending ||
-        (pending.drillId ?? pending.sessionId) !== id ||
-        pending.callId !== call.id ||
-        pending.text !== text
-      )
-        pending = {
-          drillId: id,
-          callId: call.id,
-          text,
-          clientMessageId: crypto.randomUUID(),
-        };
-      sessionStorage.setItem(key, JSON.stringify(pending));
-      await api(`/drills/${id}/calls/${call.id}/messages`, {
-        text: pending.text,
-        clientMessageId: pending.clientMessageId,
-      });
-      sessionStorage.removeItem(key);
-      setText("");
-      await refresh(id);
-    });
-  };
   const retry = () =>
     action(async () => {
       setDeploymentMode((await api("/runtime")).deploymentMode);
@@ -386,7 +351,7 @@ function App() {
                   <p>{s.description}</p>
                   <div className="card-bottom">
                     <span>{s.duration}</span>
-                    <span>文字 / 語音互動</span>
+                    <span>即時語音互動</span>
                   </div>
                 </button>
               ))}
@@ -419,12 +384,26 @@ function App() {
                 className="primary"
                 onClick={start}
                 disabled={
-                  acting || !plots.length || !deploymentMode || !!activeId
+                  acting ||
+                  !plots.length ||
+                  !deploymentMode ||
+                  !!activeId ||
+                  voice.availability !== "available"
                 }
               >
-                {acting ? "正在開始…" : "開始演練"} <span>↗</span>
+                {voice.availability === "checking"
+                  ? "正在檢查語音…"
+                  : acting
+                    ? "正在開始…"
+                    : "開始演練"}{" "}
+                <span>↗</span>
               </button>
             </div>
+            {voice.availability === "unavailable" && (
+              <p className="hint" role="status">
+                語音尚未設定，請在 .env 設定 API_KEY 並重新啟動服務。
+              </p>
+            )}
             {activeId && (
               <p className="hint">
                 目前已有進行中的演練，請從左側繼續或先結束該場。
@@ -496,22 +475,11 @@ function App() {
                       <p>{drill.pendingCall.persona.role}</p>
                     </div>
                     <button
-                      className="primary"
-                      disabled={acting || voice.active}
-                      onClick={() =>
-                        command("/calls/accept", {
-                          assignmentId: drill.pendingCall.assignmentId,
-                        })
-                      }
-                    >
-                      接通對話 ↗
-                    </button>
-                    <button
-                      className="voice-start"
+                      className="primary voice-start"
                       disabled={acting || voice.active || !voice.available}
                       onClick={startVoice}
                     >
-                      用語音接通
+                      用語音接通 ↗
                     </button>
                   </section>
                 )}
@@ -594,10 +562,10 @@ function App() {
                               ? "麥克風已靜音"
                               : "語音已連線，直接說話即可"
                             : call?.inputMode === "voice"
-                              ? "語音正在其他頁面使用或正在結束…"
+                              ? "語音正在結束，請稍候…"
                               : voice.available
-                                ? "開啟語音後，直接說話即可自動回覆。"
-                                : "語音尚未設定，可繼續使用文字。"}
+                                ? "重新開啟語音後即可繼續通話。"
+                                : "語音尚未設定，請重新啟動服務。"}
                     </div>
                     {voice.state === "active" && (
                       <span className="voice-playback">
@@ -615,7 +583,6 @@ function App() {
                         >
                           {voice.muted ? "取消靜音" : "麥克風靜音"}
                         </button>
-                        <button onClick={voice.stop}>改用文字</button>
                       </div>
                     ) : (
                       drill.state === "in_call" && (
@@ -631,7 +598,9 @@ function App() {
                         >
                           {voice.error?.startsWith("音訊播放")
                             ? "啟用聲音"
-                            : "開啟語音"}
+                            : voice.error
+                              ? "重新開啟語音"
+                              : "開啟語音"}
                         </button>
                       )
                     )}
@@ -647,30 +616,6 @@ function App() {
                       逐字稿可能不完整，播放狀態不代表整句已聽完。
                     </small>
                   </div>
-                )}
-                {drill.state === "in_call" && (
-                  <form className="composer" onSubmit={send}>
-                    <label className="sr-only" htmlFor="message">
-                      你的回覆
-                    </label>
-                    <textarea
-                      id="message"
-                      placeholder="寫下你的回覆…"
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      disabled={acting || drill.busy || voiceMode}
-                      maxLength={4000}
-                    />
-                    <button
-                      className="primary"
-                      type="submit"
-                      disabled={
-                        acting || drill.busy || voiceMode || !text.trim()
-                      }
-                    >
-                      送出 ↑
-                    </button>
-                  </form>
                 )}
                 {!finished(drill.state) && (
                   <div className="call-controls">

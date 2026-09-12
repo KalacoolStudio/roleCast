@@ -163,7 +163,7 @@ it("migrates a version-1 text database transactionally and recovers committed pe
   store.recover();
   expect(store.get(id).messages).toHaveLength(before.length + 1);
 });
-it("Live context has natural speech instructions, fixed wire defaults, scoped identity and no Judge state", async () => {
+it("Live context has scoped identity, stable per-Persona voices, and no Judge state", async () => {
   const h = await setup(),
     s = h.store.get(h.id),
     call = s.calls[0];
@@ -175,11 +175,25 @@ it("Live context has natural speech instructions, fixed wire defaults, scoped id
     speaker: "user",
   });
   s.watches.push({ reason: "JUDGE_SENTINEL" });
+  s.personas.push({
+    id: "second-persona",
+    name: "第二位",
+    role: "複核員",
+    personality: "謹慎",
+  });
+  const secondCall = {
+    ...call,
+    id: "second-call",
+    personaId: "second-persona",
+  };
   const options = liveSessionOptions(s, call),
     json = JSON.stringify(options);
   expect(json).not.toMatch(/OTHER_PERSONA_SENTINEL|JUDGE_SENTINEL|JSON Schema/);
   expect(json).toContain("林小姐");
   expect(options.input[0].content[0].text).toContain("你好");
+  expect(options.voice).toBe("marin");
+  expect(liveSessionOptions(s, secondCall).voice).toBe("cedar");
+  expect(liveSessionOptions(s, { ...call, id: "repeat" }).voice).toBe("marin");
   expect(sessionConfig(options, true)).toMatchObject({
     model: "gpt-live-1",
     store: false,

@@ -2,17 +2,13 @@
 
 ## Purpose
 
-Let participants conduct Role Cast calls by speaking and hearing the assigned Persona through gpt-live-1, with automatic audio submission, clear controls, and reliable transitions to the existing text experience.
+Let participants conduct Role Cast calls entirely by speaking and hearing the assigned Persona through gpt-live-1, with automatic audio submission, clear controls, and reliable recovery.
 
 ## Requirements
 
-### Requirement: Voice activation and text fallback
+### Requirement: Voice-only activation
 
-The interface SHALL offer voice activation beside the existing reply composer and when accepting a pending call. Microphone capture SHALL require an explicit user gesture and permission. Starting voice in an existing idle call SHALL preserve its Persona, transcript, and call ID without replaying the opening. A call accepted directly in voice mode SHALL request one spoken opening after readiness. Typed conversation SHALL remain available when voice is unavailable or permission is denied.
-
-#### Scenario: Speak from the current composer
-- **WHEN** the participant enables voice during an idle active text call and grants microphone permission
-- **THEN** the same call enters voice mode with its existing context, and the participant can speak without pressing「送出」
+The interface SHALL offer only voice activation when accepting or reopening a pending call and SHALL NOT expose a reply composer or typed-message action. Microphone capture SHALL require an explicit user gesture and permission. A call accepted directly in voice mode SHALL request one spoken opening after readiness. Starting voice after a failed attempt SHALL preserve its Persona, transcript, and call ID without replaying the opening.
 
 #### Scenario: Accept directly in voice mode
 - **WHEN** a pending call is accepted using its voice option
@@ -20,11 +16,13 @@ The interface SHALL offer voice activation beside the existing reply composer an
 
 #### Scenario: Microphone unavailable
 - **WHEN** permission is denied, no microphone exists, or the browser lacks supported audio capabilities
-- **THEN** the interface explains the failure in Traditional Chinese, releases partially acquired resources, creates no provider session, and leaves text conversation usable
+- **THEN** the interface explains the failure in Traditional Chinese, releases partially acquired resources, creates no provider session, and offers manual voice retry
 
 ### Requirement: Continuous spoken conversation
 
-Voice mode SHALL stream microphone audio automatically to gpt-live-1 and play its audio responses while continuing to accept microphone input. Spoken replies SHALL NOT require pressing submit, and recognized text SHALL NOT trigger a second text Persona generation. The interface SHALL show connection, microphone, and playback status and automatically display both speakers' captions. It SHALL provide microphone mute, return-to-text, hangup, and finish controls that remain usable during model work.
+Voice mode SHALL stream detected microphone speech automatically to gpt-live-1 and play its audio responses while continuing to accept microphone input. Spoken replies SHALL NOT require pressing submit, and recognized text SHALL NOT trigger a second Persona generation. The interface SHALL show connection, microphone, and playback status and automatically display both speakers' captions. It SHALL provide microphone mute, hangup, and finish controls that remain usable during model work.
+
+Client capture SHALL combine browser echo cancellation and noise suppression with adaptive voice activity detection. The detector SHALL adapt to steady room noise, retain bounded prefix and trailing speech, raise its start threshold during local output, and continue to permit deliberate barge-in.
 
 #### Scenario: Hands-free reply
 - **WHEN** the participant responds aloud to the Persona
@@ -38,9 +36,13 @@ Voice mode SHALL stream microphone audio automatically to gpt-live-1 and play it
 - **WHEN** the participant mutes voice input
 - **THEN** participant microphone audio is withheld immediately, the interface reports microphone state, and generated speech and session lifetime are not falsely reported as stopped
 
+#### Scenario: Background noise and speaker leakage
+- **WHEN** steady ambient noise or local Persona playback reaches the microphone without clear participant speech
+- **THEN** the client withholds those frames while retaining the beginning and end of the next detected utterance
+
 ### Requirement: Natural voice with concurrent evaluation
 
-In voice mode, Persona speech SHALL play while Judge evaluates accumulated evidence independently. A valid stop SHALL prevent further application playback and new microphone submission as soon as the client receives the stop notification. The application SHALL NOT represent speech heard before a stop decision as having been blocked. Existing text-mode replies SHALL retain their approval-before-publication behavior.
+In voice mode, Persona speech SHALL play while Judge evaluates accumulated evidence independently. A valid stop SHALL prevent further application playback and new microphone submission as soon as the client receives the stop notification. The application SHALL NOT represent speech heard before a stop decision as having been blocked.
 
 #### Scenario: Judge is still evaluating
 - **WHEN** a voice checkpoint is being evaluated and the call is active
@@ -72,23 +74,19 @@ Live credentials, startup instructions, assignment goals, Allowed Facts lists, p
 
 ### Requirement: Bounded media and failure behavior
 
-Capture, transport, playback, startup, and shutdown SHALL have finite buffer or time bounds. Normal input SHALL preserve sample ordering and handle supported browser sample rates. Unexpected overflow, malformed audio, socket loss, and provider failures SHALL be explicit, release local resources, and retain accepted transcript evidence. The application SHALL NOT silently drop and retry arbitrary audio, accumulate an unbounded recording, or automatically create replacement paid sessions.
+Capture, transport, playback, startup, and shutdown SHALL have finite buffer or time bounds. Normal input SHALL preserve sample ordering and handle supported browser sample rates. Transient media congestion SHALL discard bounded stale frames and continue with current audio; it SHALL NOT accumulate an unbounded recording or end an otherwise healthy call. Malformed audio, socket loss, persistent timeout, and provider failures SHALL be explicit, release local resources, and retain accepted transcript evidence. The application SHALL NOT automatically create replacement paid sessions.
 
 #### Scenario: Slow audio transport
 - **WHEN** microphone or playback data exceeds its configured queue limit
-- **THEN** the voice attempt stops with an understandable error and bounded cleanup, rather than accumulating stale audio or replaying it later
+- **THEN** stale frames are discarded within fixed bounds and subsequent current audio continues without closing the voice attempt
 
 #### Scenario: Provider fails
 - **WHEN** a voice connection fails during a call
-- **THEN** accepted evidence remains visible, the voice attempt is marked incomplete, and text input becomes available after cleanup if the call itself is still active
+- **THEN** accepted evidence remains visible, the voice attempt is marked incomplete, and manual voice retry becomes available if the call itself is still active
 
-### Requirement: Mode transitions and stale work isolation
+### Requirement: Voice retry and stale work isolation
 
-Starting voice SHALL wait until current text work has settled; typed submissions SHALL be rejected while voice is starting, active, or stopping. Returning to text SHALL end that voice attempt, seal already accepted evidence, and preserve the call. Refresh, page exit, and ownership loss SHALL release capture/playback and initiate bounded server cleanup. A refreshed page SHALL restore saved state without reopening the microphone or a paid session automatically. Old voice callbacks SHALL NOT affect a later voice attempt or another call.
-
-#### Scenario: Switch back to text
-- **WHEN** the participant selects「改用文字」during an active voice conversation
-- **THEN** voice resources close, accepted captions remain in the same call, and text can continue after the transition without another opening or a Recap for the mode switch
+The participant interface SHALL reject typed submissions. Stopping or losing voice SHALL seal already accepted evidence and preserve an active call for an explicit retry. Refresh, page exit, and ownership loss SHALL release capture/playback and initiate bounded server cleanup. A refreshed page SHALL restore saved state without reopening the microphone or a paid session automatically. Old voice callbacks SHALL NOT affect a later voice attempt or another call.
 
 #### Scenario: Refresh during voice
 - **WHEN** the participant reloads the page during voice
@@ -112,7 +110,7 @@ Server configuration SHALL use the existing `API_KEY` for both Live and text age
 
 #### Scenario: Text-only setup
 - **WHEN** only the legacy `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` configuration is present without `API_KEY`
-- **THEN** the text application starts normally and voice displays an unavailable state without attempting Live requests
+- **THEN** the application displays voice as unavailable, disables starting a new drill, and does not attempt a Live request
 
 #### Scenario: Voice duration expires
 - **WHEN** the current call exhausts its voice duration budget

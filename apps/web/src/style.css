@@ -615,20 +615,6 @@ footer span {
   margin-top: 6px;
   border: 1px dashed #a3b696;
 }
-.composer {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-  padding: 15px;
-  background: #eaf0e2;
-  border-radius: 10px;
-}
-.composer textarea {
-  resize: vertical;
-  min-height: 65px;
-  max-height: 180px;
-  font-size: 14px;
-}
 .voice-panel {
   display: flex;
   flex-wrap: wrap;
@@ -970,9 +956,6 @@ footer span {
   footer {
     padding: 20px 22px;
     font-size: 8px;
-  }
-  .composer {
-    padding: 10px;
   }
 }
 

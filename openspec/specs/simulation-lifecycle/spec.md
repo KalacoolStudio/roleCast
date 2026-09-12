@@ -29,11 +29,15 @@ Mastermind SHALL 僅於第一通前與完成通話回顧後決策。其輸出 SH
 - **THEN** 系統不呼叫 Mastermind 改寫任務、人設或即時對話
 
 ### Requirement: Persistent persona identity and scoped facts
-Persona SHALL 在整場名冊中持續存在，每通 SHALL 固定一個 Persona ID。重用時 SHALL 保留原人設及該角色過往通話記憶。角色 SHALL 接收本次任務、允許事實與自己已知的使用者資訊，不接收其他角色的私有對話，除非 Mastermind 明確將其交付。系統 SHALL 拒絕與既有固定事實相矛盾的結構化指派。
+Persona SHALL 在單次 drill 的名冊中持續存在，每通 SHALL 固定一個 Persona ID 與聲音。重用時 SHALL 保留原人設、聲音及該角色過往通話記憶；Mastermind 建立不同 Persona 時 SHALL 分配不同聲音。新 drill SHALL 從空白 Persona 名冊開始，不帶入先前 drill 的角色或對話。角色 SHALL 接收本次任務、允許事實與自己已知的使用者資訊，不接收其他角色的私有對話，除非 Mastermind 明確將其交付。系統 SHALL 拒絕與既有固定事實相矛盾的結構化指派。
 
 #### Scenario: Recall the same persona
 - **WHEN** Mastermind 選擇已完成一通對話的 Persona
-- **THEN** 下一通沿用同一 ID 與人設，帶入該角色的歷史及新任務，前一通逐字稿保持不變
+- **THEN** 下一通沿用同一 ID、人設與聲音，帶入該角色的歷史及新任務，前一通逐字稿保持不變
+
+#### Scenario: New drill roster
+- **WHEN** 前一場 drill 已結束且使用者開始新的 drill
+- **THEN** Mastermind 收到空白 Persona 名冊，且新角色不取得前一場的身分、聲音映射或對話記憶
 
 #### Scenario: Contradictory assignment
 - **WHEN** 新指派將既有訂單金額或角色身分等固定事實改為不同值

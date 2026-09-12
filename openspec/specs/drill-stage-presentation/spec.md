@@ -28,7 +28,7 @@
 
 ### Requirement: Stable character identity
 
-Mastermind SHALL 使用老闆素材，Judge SHALL 使用秘書素材；每個 Persona SHALL 在該 drill 中具有穩定的職員外觀與可見姓名。同一 Persona 再次被指派 SHALL 保留身分、外觀及既有記憶行為，並標示再次上場。舞台 SHALL 同時最多顯示這三種當前角色。
+Mastermind SHALL 使用老闆素材，Judge SHALL 使用秘書素材；每個 Persona SHALL 在該 drill 中具有穩定的職員外觀、可見姓名及聲音。同一 Persona 再次被指派 SHALL 保留身分、外觀、聲音及既有記憶行為，並標示再次上場。新 drill SHALL 建立獨立角色名冊。舞台 SHALL 同時最多顯示這三種當前角色。
 
 #### Scenario: Returning persona after refresh
 - **WHEN** Mastermind 重用曾通話的 Persona，且使用者重新整理頁面

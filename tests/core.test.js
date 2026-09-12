@@ -65,6 +65,15 @@ describe("session lifecycle and persistence", () => {
     const requests = h.agents.calls.length;
     h.engine.view(id);
     expect(h.agents.calls).toHaveLength(requests);
+    const nextId = h.engine.start("interview");
+    await until(() => h.store.get(nextId).state === "awaiting_call");
+    expect(h.store.get(nextId).personas.map((p) => p.id)).toEqual([
+      "persona-0",
+    ]);
+    expect(
+      h.agents.calls.filter((c) => c.kind === "plan").at(-1).context.personas,
+    ).toEqual([]);
+    expect(h.store.get(id).personas).toHaveLength(2);
   });
   it("rejects second active session, duplicate conflicting content, and late messages", async () => {
     const h = make();

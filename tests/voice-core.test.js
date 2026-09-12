@@ -367,7 +367,7 @@ it("lost heartbeat and hung finalization are bounded; startup cancellation dispo
   await until(() => second.client.connections[0].disconnected);
   expect(second.store.get(second.id).calls[0].inputMode).toBe("text");
 });
-it("bounded queues reject overflow, unknown controls and duplicate attachment", async () => {
+it("bounded queues shed transient media overflow and reject invalid control", async () => {
   const h = await setup(),
     { item, socket, connection } = await h.attach();
   expect(() =>
@@ -377,11 +377,21 @@ it("bounded queues reject overflow, unknown controls and duplicate attachment", 
     h.media.control(item, { type: "transcript", text: "fake" }),
   ).toThrow();
   expect(() => h.media.audio(item, Buffer.alloc(3))).toThrow();
-  socket.bufferedAmount = 24000;
+  connection.appendAudio = () => {
+    throw { code: "LIVE_BACKPRESSURE" };
+  };
+  expect(() => h.media.audio(item, Buffer.alloc(1920))).not.toThrow();
+  socket.bufferedAmount = 384000;
   connection.emit({
     type: "session.output_audio.delta",
     delta: Buffer.alloc(1920).toString("base64"),
   });
-  await item.stopping;
-  expect(h.store.voice.get(h.id, item.id).errorCode).toBe("VOICE_BACKPRESSURE");
+  expect(item.frozen).not.toBe(true);
+  expect(socket.sent.filter(Buffer.isBuffer)).toHaveLength(0);
+  socket.bufferedAmount = 0;
+  connection.emit({
+    type: "session.output_audio.delta",
+    delta: Buffer.alloc(1920).toString("base64"),
+  });
+  expect(socket.sent.filter(Buffer.isBuffer)).toHaveLength(1);
 });
