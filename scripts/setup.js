@@ -26,6 +26,6 @@ if (
   if (install.status !== 0) process.exit(install.status || 1);
   prepare(root);
   console.log(
-    "依賴已就緒。請在 .env 填入 LLM_API_KEY、LLM_BASE_URL、LLM_MODEL，再執行 just dev。",
+    "依賴已就緒。請在 .env 填入 API_KEY、LLM_BASE_URL、LLM_MODEL，再執行 just dev。",
   );
 }

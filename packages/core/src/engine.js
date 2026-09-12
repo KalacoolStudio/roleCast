@@ -20,6 +20,7 @@ export class Engine {
     this.jobs = new Map();
     this.pending = new Set();
     this.disposed = false;
+    this.media = null;
   }
   current(token) {
     if (this.disposed) return null;
@@ -46,21 +47,7 @@ export class Engine {
         const latest = this.current(token);
         if (!latest) return;
         token.controller.abort();
-        latest.state = "failed";
-        latest.version++;
-        latest.busy = false;
-        latest.error = {
-          code: error instanceof AppError ? error.code : "INTERNAL_ERROR",
-          message:
-            error instanceof AppError
-              ? error.message
-              : "處理未完成。紀錄已保留，請開始新的演練。",
-        };
-        for (const call of latest.calls.filter((c) => !c.endedAt)) {
-          call.endReason = "failed";
-          call.endedAt = now();
-        }
-        this.store.save(latest);
+        this.fail(latest.id, error);
       })
       .finally(() => {
         this.pending.delete(promise);
@@ -139,7 +126,8 @@ export class Engine {
       this.store.save(latest);
     });
   }
-  accept(id, assignmentId) {
+  accept(id, assignmentId, mode = "text") {
+    if (!["text", "voice"].includes(mode)) throw conflict();
     const s = this.store.get(id);
     const previous = s.calls.find((c) => c.assignmentId === assignmentId);
     if (previous) return previous.id;
@@ -154,10 +142,21 @@ export class Engine {
       startedAt: now(),
       endedAt: null,
       endReason: null,
+      inputMode: mode,
     };
     s.calls.push(call);
     s.currentCallId = call.id;
     s.pendingAssignmentId = null;
+    if (mode === "voice") {
+      s.state = "in_call";
+      s.busy = false;
+      s.version++;
+      this.store.save(s);
+      this.media?.awaitOwner(id, call.id);
+    } else this.openText(s, call);
+    return call.id;
+  }
+  openText(s, call) {
     s.busy = true;
     this.launch(s, "in_call", async (token) => {
       const reply = await this.invoke("reply", s, token, call);
@@ -166,9 +165,51 @@ export class Engine {
       this.addReply(latest, call.id, reply.text);
       latest.busy = false;
       this.store.save(latest);
-      if (reply.requestHangup) this.closeCall(id, call.id, "persona");
+      if (reply.requestHangup) this.closeCall(s.id, call.id, "persona");
     });
-    return call.id;
+  }
+  returnToText(id, callId) {
+    if (this.disposed) return;
+    const s = this.store.get(id);
+    const call = s.calls.find((c) => c.id === callId);
+    if (
+      !call ||
+      call.endedAt ||
+      s.currentCallId !== callId ||
+      s.state !== "in_call"
+    )
+      return;
+    call.inputMode = "text";
+    this.store.save(s);
+    if (
+      !s.messages.some((m) => m.callId === callId && m.speaker === "persona") &&
+      !s.busy
+    )
+      this.openText(s, call);
+  }
+  fail(id, error) {
+    if (this.disposed) return;
+    let s = this.store.get(id);
+    if (terminal(s.state)) return;
+    this.media?.seal(id, s.currentCallId);
+    s = this.store.get(id);
+    this.jobs.get(id)?.controller.abort();
+    s.state = "failed";
+    s.version++;
+    s.busy = false;
+    s.error = {
+      code: error instanceof AppError ? error.code : "INTERNAL_ERROR",
+      message:
+        error instanceof AppError
+          ? error.message
+          : "處理未完成。紀錄已保留，請開始新的演練。",
+    };
+    for (const call of s.calls.filter((c) => !c.endedAt)) {
+      call.endReason = "failed";
+      call.endedAt = now();
+    }
+    this.store.save(s);
+    this.media?.callEnded(id, s.currentCallId);
   }
   addReply(s, callId, text) {
     s.messages.push({
@@ -196,7 +237,8 @@ export class Engine {
     if (s.state !== "in_call" || s.currentCallId !== callId || s.busy)
       throw conflict();
     const call = s.calls.find((c) => c.id === callId);
-    if (call.endedAt) throw conflict();
+    if (call.endedAt || (call.inputMode && call.inputMode !== "text"))
+      throw conflict();
     const message = {
       id: randomUUID(),
       callId,
@@ -234,7 +276,8 @@ export class Engine {
       latest.busy = false;
       this.store.save(latest);
       const turnCount = latest.messages.filter(
-        (m) => m.callId === callId && m.speaker === "user",
+        (m) =>
+          m.callId === callId && m.speaker === "user" && m.source !== "voice",
       ).length;
       if (reply.requestHangup || turnCount >= latest.plot.maxUserTurnsPerCall)
         this.closeCall(
@@ -246,11 +289,14 @@ export class Engine {
     return message.id;
   }
   closeCall(id, callId, reason = "user") {
-    const s = this.store.get(id);
-    const call = s.calls.find((c) => c.id === callId);
+    let s = this.store.get(id);
+    let call = s.calls.find((c) => c.id === callId);
     if (!call) throw missing();
     if (call.endedAt) return;
     if (s.currentCallId !== callId || s.state !== "in_call") throw conflict();
+    this.media?.seal(id, callId);
+    s = this.store.get(id);
+    call = s.calls.find((c) => c.id === callId);
     call.endedAt = now();
     call.endReason = reason;
     s.busy = false;
@@ -262,6 +308,7 @@ export class Engine {
       this.store.save(latest);
       this.plan(latest);
     });
+    this.media?.callEnded(id, callId);
   }
   finish(id) {
     const s = this.store.get(id);
@@ -313,15 +360,46 @@ export class Engine {
         startedAt: c.startedAt,
         endedAt: c.endedAt,
         endReason: c.endReason,
+        inputMode: c.inputMode || "text",
+        voice: this.store.voice
+          .attempts(id, c.id)
+          .map(({ id, status, reason, errorCode, elapsedMs, finalized }) => ({
+            id,
+            status,
+            reason,
+            errorCode,
+            elapsedMs,
+            finalized,
+          })),
+        captions: this.store.voice
+          .attempts(id, c.id)
+          .flatMap((a) => this.store.voice.fragments(id, a.id)),
         messages: s.messages
           .filter((m) => m.callId === c.id)
-          .map(({ id, speaker, text, createdAt, sequence }) => ({
-            id,
-            speaker,
-            text,
-            createdAt,
-            sequence,
-          })),
+          .map(
+            ({
+              id,
+              speaker,
+              text,
+              createdAt,
+              sequence,
+              source,
+              voiceId,
+              fragmentSpans,
+              partial,
+              playback,
+              late,
+            }) => ({
+              id,
+              speaker,
+              text,
+              createdAt,
+              sequence,
+              ...(source === "voice"
+                ? { source, voiceId, fragmentSpans, partial, playback, late }
+                : {}),
+            }),
+          ),
       })),
       report: s.report,
     };

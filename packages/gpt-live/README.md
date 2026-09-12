@@ -14,7 +14,7 @@ import {
 } from "@role-cast/gpt-live";
 
 const live = createGptLiveClient({
-  apiKey: process.env.OPENAI_API_KEY, // Read by your server, explicitly passed in.
+  apiKey: process.env.API_KEY, // Read by your server, explicitly passed in.
 });
 ```
 
@@ -198,7 +198,15 @@ Public errors have fixed messages and safe metadata, without raw SDK errors or c
 
 ## Role Cast integration and validation
 
-Future integration must map training call IDs to Live IDs, supply authorized Persona context, store transcript fragments, define completed training turns, handle Judge intervention, and control playback. Streaming fragments cannot be passed directly to the existing validated `Agents.run()`/Engine contract. If speech must wait for Judge approval, the application must enforce that playback policy; direct model audio is not gated by this wrapper.
+Role Cast now integrates the primary WebSocket through [the voice coordinator](../../apps/server/src/voice.js), [HTTP/WebSocket relay](../../apps/server/src/voice-relay.js), and [browser audio controller](../../apps/web/src/voice-media.js). The server passes the existing `API_KEY` to both Live and the structured agents; it does not read `OPENAI_API_KEY`. `OPENAI_BASE_URL` and `LIVE_VOICE` remain optional Live settings, while `LLM_BASE_URL` and `LLM_MODEL` configure the structured agents. Legacy `LLM_API_KEY` is a text-only fallback when `API_KEY` is absent. The wrapper itself continues to accept explicit credentials without reading environment variables. See the [application setup and controls](../../README.md#gpt-live-模組).
+
+The browser first prepares microphone/audio, reserves a call-bound attempt, and attaches with a single-use token in its first WebSocket frame. The server owns the provider connection and exposes only audio, captions, and public status. Do not pass raw Live session events or private instructions to the participant. Local production and Vite development origins are checked exactly; custom embedded frontends must provide their exact origins through `createApp(engine, { frontendOrigins })`.
+
+The integration streams mono PCM16LE 24 kHz in 40 ms packets, resamples actual device rates, bounds transport queues to 500 ms and playback to 250 ms, and keeps input running during output. A 5-second heartbeat has a 15-second ownership deadline. Voice attempts require explicit activation and never reconnect automatically. Mute keeps silence frames flowing and consumes the same cumulative per-call 180-second budget.
+
+Original transcripts are stored separately from immutable one-second evidence checkpoints. Checkpoints are partial evidence, not completed turns or extra typed submissions. Judge runs independently with one in-flight check and a coalesced pending high-water mark. Scoped `voiceAssist` work returns validated quiet context using `appendThinking`; it does not create duplicate text replies or execute tools. Voice speech plays during evaluation; any stop clears playback and seals accepted evidence before Recap. Returning to text drains the final required Judge and closes the attempt without producing a Recap. Remote close waits are bounded, and `finalized` distinguishes confirmed usage from incomplete cleanup.
+
+For offline integration tests, inject `{ liveClient, voiceOptions }` into `createApp(engine, options)` or construct `VoiceCoordinator(engine, { client, ...limits })`. Browser media and transport can be injected into `VoiceMedia` through `env` and `request`. SQLite schema 2 preserves source fragments, attempts, and normal report message IDs; restart seals committed fragments and interrupts old attempts without model calls.
 
 Tests use injected transports and loopback HTTP/WebSocket providers. Run `npm test` and `npm run check` from the repository root. Example interaction, cleanup, the real pinned SDK's wire format, redacted errors, races, deadlines, and package isolation are covered. No test reads real `.env` credentials or calls a paid endpoint. Live-account access, microphone interoperability, and actual voice quality remain unverified.
 

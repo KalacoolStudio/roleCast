@@ -82,6 +82,9 @@ export const reportSchema = z
   })
   .strict();
 export const schemas = {
+  voiceAssist: z
+    .object({ context: z.string().max(2000), requestHangup: z.boolean() })
+    .strict(),
   plan: planSchema,
   reply: replySchema,
   watch: watchSchema,

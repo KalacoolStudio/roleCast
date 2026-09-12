@@ -5,16 +5,31 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { AppError } from "../../../packages/core/src/contracts.js";
 import { publicPlot } from "../../../packages/core/src/plot-contracts.js";
+import { VoiceCoordinator, voiceError } from "./voice.js";
+import { createVoiceRelay } from "./voice-relay.js";
 
 export async function createApp(
   engine,
-  { webRoot = fileURLToPath(new URL("../../web/dist/", import.meta.url)) } = {},
+  {
+    webRoot = fileURLToPath(new URL("../../web/dist/", import.meta.url)),
+    voice,
+    liveClient,
+    voiceOptions,
+    frontendOrigins,
+  } = {},
 ) {
   const app = Fastify({
     logger: false,
     bodyLimit: 32768,
     forceCloseConnections: true,
   });
+  const media = new VoiceCoordinator(engine, {
+    ...voiceOptions,
+    settings: voice,
+    client: liveClient,
+  });
+  const relay = createVoiceRelay(app.server, media, frontendOrigins);
+  app.decorate("voice", media);
   const body = (properties, required) => ({
     schema: {
       body: {
@@ -72,6 +87,7 @@ export async function createApp(
     engine.store.db.prepare("SELECT 1").get();
     return { status: "ok" };
   });
+  app.get("/api/capabilities", async () => ({ voice: media.capabilities() }));
   app.get("/api/plots", async () => engine.store.listPlots().map(publicPlot));
   app.get("/api/plots/:id", async (req) => engine.store.getPlot(req.params.id));
   app.post("/api/plots", { bodyLimit: 262144 }, async (req, reply) =>
@@ -117,11 +133,38 @@ export async function createApp(
     );
     app.post(
       `/api/${resource}/:id/calls/accept`,
-      body({ assignmentId: identifier }, ["assignmentId"]),
-      async (req, reply) =>
-        reply.code(202).send({
-          callId: engine.accept(req.params.id, req.body?.assignmentId),
-        }),
+      body(
+        {
+          assignmentId: identifier,
+          mode: { type: "string", enum: ["text", "voice"] },
+        },
+        ["assignmentId"],
+      ),
+      async (req, reply) => {
+        if (req.body.mode === "voice") {
+          relay.requireOrigin(req.headers.origin, req.headers.host);
+          if (!media.capabilities().available) throw voiceError();
+        }
+        return reply.code(202).send({
+          callId: engine.accept(
+            req.params.id,
+            req.body.assignmentId,
+            req.body.mode,
+          ),
+        });
+      },
+    );
+    app.post(
+      `/api/${resource}/:id/calls/:callId/voice`,
+      body({ requestId: identifier }, ["requestId"]),
+      async (req, reply) => {
+        relay.requireOrigin(req.headers.origin, req.headers.host);
+        return reply
+          .code(201)
+          .send(
+            media.reserve(req.params.id, req.params.callId, req.body.requestId),
+          );
+      },
     );
     app.post(
       `/api/${resource}/:id/calls/:callId/messages`,
@@ -166,8 +209,12 @@ export async function createApp(
         : reply.sendFile("index.html"),
     );
   }
-  app.addHook("onClose", async () => {
+  app.addHook("preClose", async () => {
     engine.dispose();
+    await media.dispose();
+    await relay.dispose();
+  });
+  app.addHook("onClose", async () => {
     engine.store.close();
   });
   return app;

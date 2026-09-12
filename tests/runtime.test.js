@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "../apps/server/src/config.js";
+import { loadConfig, liveConfiguration } from "../apps/server/src/config.js";
 import { prepare } from "../scripts/setup.js";
 import { createApp } from "../apps/server/src/app.js";
 import { harness, ready, until } from "./support/fixtures.js";
@@ -15,10 +15,10 @@ it("validates settings and env priority without revealing values; setup preserve
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
   writeFileSync(
     join(dir, ".env.example"),
-    "LLM_API_KEY=\nLLM_BASE_URL=\nLLM_MODEL=\n",
+    "API_KEY=\nLLM_BASE_URL=\nLLM_MODEL=\n",
   );
   prepare(dir);
-  expect(() => loadConfig(dir, {})).toThrow("LLM_API_KEY");
+  expect(() => loadConfig(dir, {})).toThrow("API_KEY");
   const contents =
     "LLM_API_KEY=SENTINEL_SECRET\nLLM_BASE_URL=https://example.test/v1\nLLM_MODEL=first\n";
   writeFileSync(join(dir, ".env"), contents);
@@ -158,6 +158,23 @@ it("API validates inputs, exposes only public snapshots, and has idempotent comm
   });
   await until(() => h.store.get(id).state === "completed");
   expect((await app.inject(`/api/drills/${id}/report`)).statusCode).toBe(200);
+});
+it("shared API_KEY enables public voice capability without exposing credentials or opening Live", async () => {
+  const h = harness();
+  const app = await createApp(h.engine, {
+    webRoot: "/nonexistent",
+    voice: liveConfiguration({
+      API_KEY: "SHARED_KEY_SENTINEL",
+      OPENAI_API_KEY: "OBSOLETE_KEY_SENTINEL",
+    }),
+  });
+  cleanup.push(() => app.close());
+  const response = await app.inject("/api/capabilities");
+  expect(response.json()).toEqual({
+    voice: { available: true, model: "gpt-live-1" },
+  });
+  expect(response.body).not.toMatch(/SENTINEL|apiKey|API_KEY/);
+  expect(app.voice.items.size).toBe(0);
 });
 it("shutdown makes pending work unable to touch a closed database", async () => {
   const h = harness();

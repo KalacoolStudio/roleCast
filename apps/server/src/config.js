@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "dotenv";
+import { createGptLiveClient } from "@role-cast/gpt-live";
 export const root = fileURLToPath(new URL("../../../", import.meta.url));
 export function readEnvironment(directory = root, env = process.env) {
   let file = {};
@@ -14,9 +15,11 @@ export function readEnvironment(directory = root, env = process.env) {
 }
 export function loadConfig(directory = root, env = process.env) {
   const values = readEnvironment(directory, env);
-  const invalid = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"].filter(
+  const apiKey = values.API_KEY?.trim() ? values.API_KEY : values.LLM_API_KEY;
+  const invalid = ["LLM_BASE_URL", "LLM_MODEL"].filter(
     (key) => !values[key]?.trim(),
   );
+  if (!apiKey?.trim()) invalid.unshift("API_KEY");
   try {
     const url = new URL(values.LLM_BASE_URL);
     if (
@@ -36,14 +39,34 @@ export function loadConfig(directory = root, env = process.env) {
   if (invalid.length)
     throw new Error(`請檢查設定：${[...new Set(invalid)].join(", ")}`);
   return {
-    apiKey: values.LLM_API_KEY,
+    apiKey,
     baseURL: values.LLM_BASE_URL,
     model: values.LLM_MODEL,
     outputMode,
     port,
+    live: liveConfiguration(values),
     databasePath: resolve(
       directory,
       values.DATABASE_PATH || "./data/role-cast.sqlite",
     ),
   };
+}
+
+export function liveConfiguration(values) {
+  if (!values.API_KEY?.trim())
+    return { available: false, reason: "NOT_CONFIGURED" };
+  try {
+    const config = {
+      apiKey: values.API_KEY,
+      baseURL: values.OPENAI_BASE_URL || "https://api.openai.com/v1",
+      maxBufferedBytes: 32768,
+    };
+    createGptLiveClient(config); // Validates locally; no SDK construction or network.
+    const voice = values.LIVE_VOICE || "marin";
+    if (typeof voice !== "string" || !voice.trim() || voice.length > 100)
+      throw new Error();
+    return { available: true, config, voice };
+  } catch {
+    return { available: false, reason: "INVALID_CONFIG" };
+  }
 }

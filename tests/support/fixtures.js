@@ -47,6 +47,8 @@ export function fixtureAgents(overrides = {}, ms = 0) {
             : "了解，請再說明你會如何查證與處理。",
           requestHangup: !!user?.text.includes("稍後"),
         };
+      if (kind === "voiceAssist")
+        return { context: "請依已知資料協助使用者。", requestHangup: false };
       if (kind === "watch") {
         const stop =
           !!user?.text.includes("詐騙") && !!user?.text.includes("查證");
