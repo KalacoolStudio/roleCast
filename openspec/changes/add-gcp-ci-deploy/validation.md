@@ -141,3 +141,7 @@ The temporary service, container, loop device, disk and runtime/state directorie
 | Explicit selected/invalid restoration | Actual private GCS backup restored to isolated volume; checksum corruption rejection and host SQLite/WAL/SHM preservation tests |
 
 Main has consolidated its earlier text, plots, stage and voice changes. This deployment change retains its `local-runtime` disclosure delta against those canonical specs while preserving local defaults and archived history. All implementation and live acceptance tasks are complete; the change remains available for the normal OpenSpec archive workflow.
+
+## Workspace integration note — 2026-09-12
+
+The `style` merge of current main reconciles this active change's global/shared-workspace wording with main's browser-scoped histories, per-workspace active limit, and schema 5 migration. The local-runtime disclosure delta is synchronized; the three new cloud capability deltas remain active. Original cloud acceptance above remains historical evidence. This documentation reconciliation did not deploy or change cloud resources; combined local tests are recorded in [the introduction change](../add-anti-fraud-chat-intro/validation.md#main-integration--2026-09-12).

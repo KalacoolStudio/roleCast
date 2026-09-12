@@ -37,7 +37,7 @@
 ## 6. Documentation and integrated validation
 
 - [x] 6.1 Write a complete GCP deployment guide covering billed-project prerequisites, infrastructure bootstrap, secret-version entry, GitHub variables, branch protection, IAP access, costs/resource inventory, and first deployment/retry; verify commands and required values against the implemented configuration.
-- [x] 6.2 Document backups, backup-age inspection, compatible image rollback, explicit data restore, VM replacement, and shared-workspace/restart limitations; verify that examples avoid developer data uploads, public ingress, and implicit data deletion.
+- [x] 6.2 Document backups, backup-age inspection, compatible image rollback, explicit data restore, VM replacement, and workspace/restart limitations; verify that examples avoid developer data uploads, public ingress, and implicit data deletion.
 - [x] 6.3 Update README and example configuration while retaining local commands and disclosures; verify `npm run check`, `npm run build`, unit/integration tests, and browser tests in the isolated worktree without altering the other task's files or processes.
 - [x] 6.4 Run workflow lint, Terraform validation, container integration, and deployment failure/backup/restore scenarios; record results and exact tested versions in this change's validation artifact, and verify each spec scenario has test evidence or an explicit live validation step.
 - [x] 6.5 In the user-configured GCP environment, verify a current-main deployment, authorized and denied private access, frontend/API health, record retention across release/reboot, and backup restoration to an isolated destination; record commit/digest and evidence, and keep this task pending if cloud setup or access is unavailable.

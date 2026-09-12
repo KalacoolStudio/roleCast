@@ -1,3 +1,4 @@
+import { startDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
@@ -23,7 +24,7 @@ test("live stage follows real calls, retains persona identity, and restores with
     .locator(".plot-card")
     .filter({ hasText: "後端工程師面試" })
     .click();
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await expect(
     page.getByRole("region", { name: "角色即時舞台" }),
   ).toBeVisible();
@@ -86,7 +87,7 @@ test("mobile reduced motion keeps the voice-only stage usable", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await expect(page.getByLabel("減少動畫")).toBeChecked();
   await acceptThroughApi(page);
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
@@ -121,7 +122,7 @@ test("SSE fallback catches up once, then reconnects without extra calls", async 
 }) => {
   await page.route("**/events/stream*", (route) => route.abort());
   await page.goto("/");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
   await expect(page.locator(".stage-caption")).toContainText("備援連線");
   const id = await page.evaluate(() => location.hash.slice(1));
@@ -144,7 +145,7 @@ test("a legacy snapshot without stage metadata remains usable", async ({
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await acceptThroughApi(page);
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   const id = await page.evaluate(() => location.hash.slice(1));
@@ -193,7 +194,7 @@ test("walk sprites change frames while Persona and Judge actually move, then ret
     };
     requestAnimationFrame(sample);
   });
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   const persona = page.locator(".stage-character.persona"),
     judge = page.locator(".stage-character.judge");
   await expect(persona).toHaveAttribute("data-position", "call");

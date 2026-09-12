@@ -1,3 +1,4 @@
+import { startDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 test.use({
@@ -71,7 +72,7 @@ async function currentDrill(page) {
 }
 async function start(page) {
   await page.goto("/");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await expect(page.getByRole("button", { name: "用語音接通" })).toBeEnabled();
 }
 async function released(page) {

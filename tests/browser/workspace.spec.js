@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startDrill } from "../support/browser.js";
 
 test("two browser workspaces run concurrently without seeing each other", async ({
   browser,
@@ -14,10 +15,7 @@ test("two browser workspaces run concurrently without seeing each other", async 
       expect(first.locator(".plot-card").first()).toBeVisible(),
       expect(second.locator(".plot-card").first()).toBeVisible(),
     ]);
-    await Promise.all([
-      first.getByRole("button", { name: /開始演練/ }).click(),
-      second.getByRole("button", { name: /開始演練/ }).click(),
-    ]);
+    await Promise.all([startDrill(first), startDrill(second)]);
     await Promise.all([
       expect(first.getByRole("button", { name: "用語音接通" })).toBeEnabled(),
       expect(second.getByRole("button", { name: "用語音接通" })).toBeEnabled(),
