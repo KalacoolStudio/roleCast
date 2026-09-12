@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+.env*
+openspec
+guidelines
+test-results
+playwright-report
+package-lock.json
