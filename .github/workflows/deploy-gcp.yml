@@ -120,7 +120,7 @@ jobs:
             echo 'Skipped: a newer main commit arrived during publishing.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          printf 'Requested commit: `%s`\n\nRequested image: `%s`\n\n' "$GITHUB_SHA" "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Requested commit: %s\n\nRequested image: %s\n\n' "$GITHUB_SHA" "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
           gcloud compute ssh "$GCP_INSTANCE" --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" \
             --tunnel-through-iap --ssh-key-expire-after=10m --quiet \
             --command "sudo /bin/bash /var/lib/rolecast/host.sh submit '$IMAGE' '$GITHUB_SHA' '$GITHUB_RUN_NUMBER'" \
@@ -128,8 +128,8 @@ jobs:
           outcome=$(sed -n 's/^ROLECAST_RESULT=//p' "$RUNNER_TEMP/rolecast-release-result" | tail -n 1)
           [[ "$outcome" == deployed || "$outcome" == already-current || "$outcome" == skipped-stale ]]
           {
-            printf 'Outcome: `%s`\n\n' "$outcome"
-            printf 'Private access: `gcloud compute start-iap-tunnel %s 8080 --project=%s --zone=%s --local-host-port=127.0.0.1:18080`\n' "$GCP_INSTANCE" "$GCP_PROJECT_ID" "$GCP_ZONE"
+            printf 'Outcome: %s\n\n' "$outcome"
+            printf 'Private access: gcloud compute start-iap-tunnel %s 8080 --project=%s --zone=%s --local-host-port=127.0.0.1:18080\n' "$GCP_INSTANCE" "$GCP_PROJECT_ID" "$GCP_ZONE"
             echo 'Open http://127.0.0.1:18080 while the tunnel is running.'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Refresh identity for final status
