@@ -131,7 +131,7 @@ Plot 定義保存在 SQLite。內建 JSON 僅於資料庫缺少對應 ID 時載�
 - 手機採上下排列，輸入時收合舞台並保留角色狀態；可勾選「減少動畫」，也會遵循系統減少動態效果設定。
 - 重新整理或回到背景分頁後，直接還原目前站位，不重播整場。SSE 暫時不可用時顯示「備援連線」並改用輪詢；完全斷線時提示重新連線。
 
-素材位於 `apps/web/public/assets/characters/warm/`，圖格與腳底對齊設定位於 `apps/web/src/stage/sprites.js`。原始 PNG 保留，顯示時裁切影格與混合淺色紙底；目前使用素色區域，未加入辦公室背景。
+角色素材位於 `apps/web/public/assets/characters/warm/`，辦公室背景位於 `apps/web/public/assets/backgrounds/office.png`，圖格與腳底對齊設定位於 `apps/web/src/stage/sprites.js`。舞台依背景比例縮放，原始透明 PNG 圖集會在顯示時裁切成待機與走路影格。
 
 ## GPT Live 模組
 

@@ -1,12 +1,14 @@
 import { isTerminal } from "./feed.js";
 export const positions = {
-  boss: [25, 38],
-  report: [45, 38],
-  standby: [48, 77],
-  entry: [-12, 77],
-  waiting: [27, 77],
-  call: [76, 65],
-  watch: [86, 87],
+  boss: [82, 44],
+  report: [64, 49],
+  standby: [82, 82],
+  entry: [-12, 92],
+  foyer: [18, 92],
+  waiting: [18, 64],
+  aisle: [52, 64],
+  call: [52, 76],
+  watch: [68, 65],
 };
 export const activityLabels = {
   planning_started: "老闆正在安排下一通",
@@ -100,8 +102,10 @@ function framesFor(event, scene, snapshot) {
           phase: "entering",
           mastermind: actor("boss", { bubble: "已指派下一位職員" }),
         }),
-        frame(650, { persona: actor("waiting", { ...person, walking: true }) }),
-        frame(650, { persona: actor("call", { ...person, walking: true }) }),
+        frame(350, { persona: actor("foyer", { ...person, walking: true }) }),
+        frame(450, { persona: actor("waiting", { ...person, walking: true }) }),
+        frame(500, { persona: actor("aisle", { ...person, walking: true }) }),
+        frame(350, { persona: actor("call", { ...person, walking: true }) }),
       ];
     }
     case "call_started":
@@ -114,18 +118,24 @@ function framesFor(event, scene, snapshot) {
       ];
     case "call_ended":
       return [
-        frame(600, {
-          ...move("persona", "waiting", { facing: "left", bubble: "本通結束" }),
+        frame(250, {
+          ...move("persona", "aisle", { facing: "left", bubble: "本通結束" }),
           judge: actor("standby", { walking: true, bubble: "整理本通紀錄…" }),
           phase: "leaving",
         }),
-        frame(600, {
-          ...move("persona", "entry", { facing: "left", bubble: "本通結束" }),
+        frame(350, {
+          ...move("persona", "waiting", { facing: "left", bubble: "本通結束" }),
           judge: actor("report", {
             walking: true,
             facing: "left",
             bubble: "整理本通紀錄…",
           }),
+        }),
+        frame(300, {
+          ...move("persona", "foyer", { facing: "left", bubble: "本通結束" }),
+        }),
+        frame(300, {
+          ...move("persona", "entry", { facing: "left", bubble: "本通結束" }),
         }),
         frame(0, { persona: null }),
       ];
