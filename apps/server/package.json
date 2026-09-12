@@ -2,5 +2,9 @@
   "name": "@role-cast/server",
   "private": true,
   "type": "module",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "dependencies": {
+    "@role-cast/gpt-live": "0.1.0",
+    "ws": "8.21.3"
+  }
 }

@@ -56,6 +56,41 @@ function completion(res, text, finishReason = "stop") {
   );
 }
 const reply = { text: "測試回覆", requestHangup: false };
+it("validates voice assistance through main's strict output contract, including empty context", async () => {
+  const result = { context: "", requestHangup: false };
+  const { config, requests } = await provider((_req, res) =>
+    completion(res, JSON.stringify(result)),
+  );
+  const prompt = effectivePrompts({
+    prompts: {
+      mastermind: "PRIVATE_M",
+      judge: "PRIVATE_J",
+      reporter: "PRIVATE_R",
+    },
+  }).voiceAssist;
+  expect(
+    await new Agents(config).run(
+      "voiceAssist",
+      { messages: [] },
+      undefined,
+      prompt,
+    ),
+  ).toEqual(result);
+  expect(requests).toHaveLength(1);
+  const body = requests[0].body;
+  expect(body.response_format.json_schema.strict).toBe(true);
+  expect(
+    body.response_format.json_schema.schema.properties.result.properties.context
+      .type,
+  ).toBe("string");
+  expect(() =>
+    outputContract("voiceAssist", { messages: [] }).wire.parse({
+      result: { ...result, context: "x".repeat(2001) },
+    }),
+  ).toThrow();
+  expect(JSON.stringify(body)).not.toMatch(/PRIVATE_M|PRIVATE_J|PRIVATE_R/);
+  expect(JSON.parse(body.messages[1].content).authorGuidance).toBe("");
+});
 it("uses configured Chat API, key and model with JSON validation", async () => {
   const { config, requests } = await provider((_req, res) =>
     completion(res, JSON.stringify(reply)),

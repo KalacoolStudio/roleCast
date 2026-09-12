@@ -7,7 +7,9 @@ try {
   const config = loadConfig();
   const store = new Store(config.databasePath);
   store.recover();
-  const app = await createApp(new Engine(store, new Agents(config)));
+  const app = await createApp(new Engine(store, new Agents(config)), {
+    voice: config.live,
+  });
   await app.listen({ port: config.port, host: "127.0.0.1" });
   console.log(`Role Cast: http://127.0.0.1:${config.port}`);
   let stopping = false;

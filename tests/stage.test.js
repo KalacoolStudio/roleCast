@@ -9,6 +9,7 @@ import { createApp } from "../apps/server/src/app.js";
 import { streamStage } from "../apps/server/src/stage-stream.js";
 import { StageDirector, snapshotScene } from "../apps/web/src/stage/scene.js";
 import { connectDrill } from "../apps/web/src/stage/feed.js";
+import { transcript } from "./support/voice.js";
 
 const cleanup = [];
 const make = (...args) => {
@@ -21,6 +22,35 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 const types = (h, id) => h.store.events(id, 0, 500).events.map((e) => e.type);
+
+it("publishes caption checkpoints in snapshots without inventing semantic stage turns", async () => {
+  const h = make();
+  const { id, callId } = await ready(h);
+  const before = h.engine.view(id).stage;
+  const events = h.store.events(id);
+  const notifications = [];
+  h.store.subscribe((id) => notifications.push(id));
+  h.store.voice.create(id, callId, "voice");
+  h.store.voice.ingest(id, "voice", transcript("還在說話"));
+  const [checkpoint] = h.store.voice.checkpoint(id, "voice");
+  const view = h.engine.view(id);
+  expect(view.calls[0].messages.at(-1)).toMatchObject({
+    id: checkpoint.id,
+    text: "還在說話",
+    source: "voice",
+  });
+  expect(view.stage.revision).toBeGreaterThan(before.revision);
+  expect(view.stage.lastEventSequence).toBe(before.lastEventSequence);
+  expect(h.store.events(id)).toEqual(events);
+  expect(notifications).toEqual([id]);
+  h.engine.closeCall(id, callId);
+  h.engine.closeCall(id, callId);
+  await until(() => h.store.get(id).recaps.length === 1);
+  expect(types(h, id).filter((type) => type === "call_ended")).toHaveLength(1);
+  expect(
+    types(h, id).filter((type) => type === "recap_completed"),
+  ).toHaveLength(1);
+});
 
 it("commits a complete ordered handoff with stable identity, deduplication and private data exclusion", async () => {
   const h = make();
@@ -120,7 +150,7 @@ it.each([1, 2])(
     expect(store.get(id).messages).toEqual(old.messages);
     store.recover();
     store.recover();
-    expect(store.db.pragma("user_version", { simple: true })).toBe(3);
+    expect(store.db.pragma("user_version", { simple: true })).toBe(4);
     expect(store.events(id).events.map((e) => e.type)).toEqual([
       "call_ended",
       "drill_interrupted",

@@ -1,3 +1,4 @@
+import { VoiceRecords } from "./voice.js";
 import { stageMetadata, stageEvents } from "../../core/src/stage.js";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
@@ -31,13 +32,19 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     const version = this.db.pragma("user_version", { simple: true });
     this.listeners = new Set();
-    if (version > 3) {
+    if (version > 4) {
       this.db.close();
       throw new Error("資料庫版本較新，請使用相容的程式。");
     }
-    if (!version)
+    const hasTable = (name) =>
+      !!this.db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+        .get(name);
+    try {
       this.db.transaction(() => {
-        this.db.exec(`
+        if (!version)
+          this.db.transaction(() => {
+            this.db.exec(`
         CREATE TABLE sessions (id TEXT PRIMARY KEY, state TEXT NOT NULL, payload TEXT NOT NULL);
         CREATE UNIQUE INDEX one_active_session ON sessions((1)) WHERE state NOT IN ('completed','failed','interrupted');
         CREATE TABLE personas (session_id TEXT REFERENCES sessions(id), id TEXT, payload TEXT NOT NULL, PRIMARY KEY(session_id,id));
@@ -49,46 +56,55 @@ export class Store {
         CREATE TABLE reports (session_id TEXT PRIMARY KEY REFERENCES sessions(id), payload TEXT NOT NULL);
         PRAGMA user_version = 1;
       `);
-      })();
-    if (version < 2)
-      this.db.transaction(() => {
-        this.db.exec(
-          "CREATE TABLE plots (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL)",
-        );
-        for (const row of this.db
-          .prepare("SELECT id,payload FROM sessions")
-          .all()) {
-          const data = JSON.parse(row.payload);
-          if (data.scenario) {
-            data.plot = data.scenario;
-            delete data.scenario;
-            this.db
-              .prepare("UPDATE sessions SET payload=? WHERE id=?")
-              .run(JSON.stringify(data), row.id);
-          }
-        }
-        this.db.pragma("user_version = 2");
-      })();
+          })();
+        if (version < 2 || !hasTable("plots"))
+          this.db.transaction(() => {
+            this.db.exec(
+              "CREATE TABLE IF NOT EXISTS plots (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL)",
+            );
+            for (const row of this.db
+              .prepare("SELECT id,payload FROM sessions")
+              .all()) {
+              const data = JSON.parse(row.payload);
+              if (data.scenario) {
+                data.plot = data.scenario;
+                delete data.scenario;
+                this.db
+                  .prepare("UPDATE sessions SET payload=? WHERE id=?")
+                  .run(JSON.stringify(data), row.id);
+              }
+            }
+            this.db.pragma("user_version = 2");
+          })();
 
-    if (version < 3)
-      this.db.transaction(() => {
-        this.db.exec(
-          "CREATE TABLE IF NOT EXISTS drill_stage_events (session_id TEXT NOT NULL REFERENCES sessions(id), sequence INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(session_id,sequence))",
-        );
-        for (const row of this.db.prepare("SELECT id FROM sessions").all()) {
-          const drill = this.get(row.id);
-          const meta = JSON.parse(
-            this.db
-              .prepare("SELECT payload FROM sessions WHERE id=?")
-              .get(row.id).payload,
-          );
-          meta.stage = stageMetadata(drill, meta.stage);
-          this.db
-            .prepare("UPDATE sessions SET payload=? WHERE id=?")
-            .run(JSON.stringify(meta), row.id);
-        }
-        this.db.pragma("user_version = 3");
+        if (version < 3)
+          this.db.transaction(() => {
+            this.db.exec(
+              "CREATE TABLE IF NOT EXISTS drill_stage_events (session_id TEXT NOT NULL REFERENCES sessions(id), sequence INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(session_id,sequence))",
+            );
+            for (const row of this.db
+              .prepare("SELECT id FROM sessions")
+              .all()) {
+              const drill = this.get(row.id);
+              const meta = JSON.parse(
+                this.db
+                  .prepare("SELECT payload FROM sessions WHERE id=?")
+                  .get(row.id).payload,
+              );
+              meta.stage = stageMetadata(drill, meta.stage);
+              this.db
+                .prepare("UPDATE sessions SET payload=? WHERE id=?")
+                .run(JSON.stringify(meta), row.id);
+            }
+            this.db.pragma("user_version = 3");
+          })();
+        this.voice = new VoiceRecords(this);
+        this.db.pragma("user_version = 4");
       })();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
   subscribe(listener) {
     this.listeners.add(listener);
@@ -301,7 +317,19 @@ export class Store {
     this.save(s);
   }
   recover() {
-    for (const row of this.list().filter((s) => !terminal(s.state))) {
+    for (const row of this.list()) {
+      for (const attempt of this.voice.attempts(row.id)) {
+        if (["closed", "failed", "interrupted"].includes(attempt.status))
+          continue;
+        this.voice.checkpoint(row.id, attempt.id, true);
+        this.voice.update(row.id, attempt.id, {
+          status: "interrupted",
+          endedAt: new Date().toISOString(),
+          reason: "interrupted",
+          finalized: false,
+        });
+      }
+      if (terminal(row.state)) continue;
       const s = this.get(row.id);
       s.state = "interrupted";
       s.version++;
@@ -313,6 +341,7 @@ export class Store {
       for (const call of s.calls.filter((c) => !c.endedAt)) {
         call.endedAt = new Date().toISOString();
         call.endReason = "interrupted";
+        call.inputMode = "text";
       }
       this.save(s);
     }
