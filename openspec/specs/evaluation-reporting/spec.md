@@ -52,4 +52,4 @@ Reporter SHALL 在正常結束或使用者主動結束時，依逐字稿、情�
 
 #### Scenario: Insufficient evidence
 - **WHEN** 使用者在沒有實質回答前結束演練
-- **THEN** 報告明確表示證據不足，不捏造表現或訊息引用
+- **THEN** 系統不呼叫 Reporter 模型，直接產生固定的證據不足報告，不捏造表現或訊息引用

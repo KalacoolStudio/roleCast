@@ -119,6 +119,13 @@ export function validateResult(kind, value, context) {
     (message) => kind !== "report" || message.speaker === "user",
   );
   validateReferences(result, new Set(validEvidence.map((m) => m.id)));
+  if (
+    kind === "plan" &&
+    result.action === "finish" &&
+    Array.isArray(context.calls) &&
+    !context.calls.length
+  )
+    throw new Error("Cannot finish before first call");
   if (kind === "plan" && result.action !== "finish") {
     const sourceIds = new Set(
       messages.filter((m) => m.speaker === "user").map((m) => m.id),

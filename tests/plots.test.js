@@ -164,6 +164,10 @@ it("custom plot instructions cannot bypass evidence validation", async () => {
   });
   const id = h.engine.start(custom.id);
   await until(() => h.store.get(id).state === "awaiting_call");
+  const callId = h.engine.accept(id, h.store.get(id).pendingAssignmentId);
+  await until(() => !h.store.get(id).busy);
+  h.engine.send(id, callId, "report-evidence", "我會先查證");
+  await until(() => !h.store.get(id).busy);
   h.engine.finish(id);
   await until(() => h.store.get(id).state === "failed");
   expect(h.store.get(id).report).toBeNull();

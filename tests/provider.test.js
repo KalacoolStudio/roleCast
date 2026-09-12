@@ -137,6 +137,34 @@ it("repairs malformed output once then succeeds", async () => {
   );
   expect(requests).toHaveLength(2);
 });
+it("rejects an initial finish decision and retries with a Persona assignment", async () => {
+  const plan = {
+    action: "create",
+    persona: {
+      id: "persona-1",
+      name: "王專員",
+      role: "客服",
+      personality: "冷靜且有禮",
+    },
+    goal: "詢問使用者如何處理可疑要求。",
+    sharedMessageIds: [],
+  };
+  const { config, requests } = await provider((_req, res, n) =>
+    completion(res, JSON.stringify(n === 1 ? { action: "finish" } : plan)),
+  );
+
+  await expect(
+    new Agents(config).run("plan", {
+      plot: {},
+      personas: [],
+      calls: [],
+      messages: [],
+      recaps: [],
+    }),
+  ).resolves.toEqual(plan);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body.messages[0].content).toContain("INITIAL_FINISH");
+});
 it("rejects invalid references before returning a structured result", async () => {
   const { config, requests } = await provider((_req, res) =>
     completion(
@@ -280,6 +308,7 @@ it("builds a strict root object, valid nested anyOf and context-bound reference 
   const context = {
     plot: {},
     personas: [],
+    calls: [],
     messages: [
       { id: "msg-user", speaker: "user" },
       { id: "msg-persona", speaker: "persona" },
@@ -290,7 +319,7 @@ it("builds a strict root object, valid nested anyOf and context-bound reference 
   expect(json.anyOf).toBeUndefined();
   expect(JSON.stringify(json)).not.toContain("oneOf");
   const choices = json.properties.result.anyOf;
-  expect(choices).toHaveLength(2);
+  expect(choices).toHaveLength(1);
   const create = choices.find((c) => c.properties.action.enum[0] === "create");
   expect(create.properties).not.toHaveProperty("allowedFactIds");
   expect(create.properties.sharedMessageIds.items.enum).toEqual(["msg-user"]);

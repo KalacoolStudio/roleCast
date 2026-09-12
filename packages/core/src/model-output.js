@@ -78,11 +78,18 @@ export function outputContract(kind, context) {
     return result;
   };
   const json = convert(z.toJSONSchema(wire));
-  // There is no valid reuse branch until a Persona has been created.
-  if (kind === "plan" && !context.personas.length)
-    json.properties.result.anyOf = json.properties.result.anyOf.filter(
-      (branch) => !branch.properties.personaId,
-    );
+  if (kind === "plan") {
+    // There is no valid reuse branch until a Persona has been created.
+    if (!context.personas.length)
+      json.properties.result.anyOf = json.properties.result.anyOf.filter(
+        (branch) => !branch.properties.personaId,
+      );
+    // A new drill must make at least one call before the model may finish it.
+    if (Array.isArray(context.calls) && !context.calls.length)
+      json.properties.result.anyOf = json.properties.result.anyOf.filter(
+        (branch) => branch.properties.action.enum[0] !== "finish",
+      );
+  }
   return { wire, json, rules };
 }
 
@@ -91,6 +98,7 @@ const semanticErrors = {
   "Unknown source message": "SHARED_MESSAGE_ID",
   "Unknown persona": "PERSONA_ID",
   "Persona identity already exists": "DUPLICATE_PERSONA_ID",
+  "Cannot finish before first call": "INITIAL_FINISH",
   "Stop decision requires valid evidence": "STOP_EVIDENCE",
   "Wrong end reason": "END_REASON",
   "No participant evidence": "INSUFFICIENT_EVIDENCE",

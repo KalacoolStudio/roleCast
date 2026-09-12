@@ -15,6 +15,20 @@ const now = () => new Date().toISOString();
 const defaultWorkspaceId = "default";
 const initialAtmBalance = 100000;
 const amountText = (amount) => `NT$${amount.toLocaleString("en-US")}`;
+const emptyParticipantReport = () => ({
+  summary: "這次演練沒有使用者實質回答，因此沒有足夠證據評估你的表現。",
+  dimensions: [
+    {
+      name: "使用者表現",
+      assessment: "沒有可供評估的使用者回答。",
+      evidenceIds: [],
+    },
+  ],
+  strengths: [],
+  improvements: [],
+  insufficientEvidence: true,
+  uncertainties: ["需要至少一則使用者回答才能進行評估。"],
+});
 export class Engine {
   constructor(store, agents, plots = defaults) {
     this.store = store;
@@ -415,7 +429,9 @@ export class Engine {
     s.pendingAssignmentId = null;
     s.busy = false;
     this.launch(s, "reporting", async (token) => {
-      const report = await this.invoke("report", s, token);
+      const report = s.messages.some((message) => message.speaker === "user")
+        ? await this.invoke("report", s, token)
+        : emptyParticipantReport();
       const latest = this.current(token);
       if (!latest) return;
       latest.report = report;

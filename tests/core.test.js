@@ -204,9 +204,7 @@ describe("cancellation and concurrent work", () => {
           ? { plan: () => gate.promise }
           : state === "recapping"
             ? { recap: () => gate.promise }
-            : state === "reporting"
-              ? { report: () => gate.promise }
-              : {};
+            : {};
       const h = make(overrides);
       let id = h.engine.start("anti-fraud");
       if (state !== "planning")
@@ -230,19 +228,50 @@ describe("cancellation and concurrent work", () => {
         const ctx = h.agents.calls.find((v) => v.kind === "recap").context;
         gate.resolve(await base.run("recap", ctx));
       }
-      if (state === "reporting") {
-        await until(() => h.agents.calls.some((v) => v.kind === "report"));
-        const ctx = h.agents.calls.find((v) => v.kind === "report").context;
-        gate.resolve(await base.run("report", ctx));
-      }
       await until(() => h.store.get(id).state === "completed");
       expect(h.store.get(id).report.insufficientEvidence).toBe(true);
       expect(h.agents.calls.filter((v) => v.kind === "plan")).toHaveLength(
         planCalls,
       );
-      expect(h.agents.calls.filter((v) => v.kind === "report")).toHaveLength(1);
+      expect(h.agents.calls.filter((v) => v.kind === "report")).toHaveLength(0);
     },
   );
+  it("does not call Reporter when there is no participant evidence", async () => {
+    const h = make({
+      report: () => {
+        throw new Error("Reporter must not run");
+      },
+    });
+    const id = h.engine.start("anti-fraud");
+    await until(() => h.store.get(id).state === "awaiting_call");
+
+    h.engine.finish(id);
+    await until(() => h.store.get(id).state === "completed");
+    const report = h.store.get(id).report;
+    expect(h.agents.calls.some((call) => call.kind === "report")).toBe(false);
+    expect(report).toEqual({
+      summary: "這次演練沒有使用者實質回答，因此沒有足夠證據評估你的表現。",
+      dimensions: [
+        {
+          name: "使用者表現",
+          assessment: "沒有可供評估的使用者回答。",
+          evidenceIds: [],
+        },
+      ],
+      strengths: [],
+      improvements: [],
+      insufficientEvidence: true,
+      uncertainties: ["需要至少一則使用者回答才能進行評估。"],
+    });
+  });
+  it("rejects a Mastermind finish decision before the first call", async () => {
+    const h = make({ plan: () => ({ action: "finish" }) });
+    const id = h.engine.start("anti-fraud");
+
+    await until(() => h.store.get(id).state === "failed");
+    expect(h.store.get(id).calls).toHaveLength(0);
+    expect(h.store.get(id).report).toBeNull();
+  });
   it.each(["plan", "reply", "watch", "recap", "report"])(
     "records bounded failure in %s",
     async (kind) => {
@@ -259,6 +288,10 @@ describe("cancellation and concurrent work", () => {
           await until(() => !h.store.get(id).busy);
           if (kind === "watch") h.engine.send(id, callId, "x", "測試");
           else {
+            if (kind === "report") {
+              h.engine.send(id, callId, "report-evidence", "我會先查證");
+              await until(() => !h.store.get(id).busy);
+            }
             h.engine.finish(id);
           }
         }
