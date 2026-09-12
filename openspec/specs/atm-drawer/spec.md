@@ -15,6 +15,30 @@
 - **WHEN** 使用者在演練頁面啟用右側 ATM 頁籤
 - **THEN** 系統顯示目前 drill 的可用餘額、匯款與提款功能，且介面不呈現任何銀行名稱或品牌
 
+### Requirement: Demo recipient account autofill
+
+匯款模式中，使用者每次點擊可用且 placeholder 為「輸入收款帳號」的欄位時，系統 SHALL 將收款帳號設為 `2580741036925814`，取代欄位原有內容，方便展示。自動填入後，欄位 SHALL 仍允許手動編輯。自動填入 SHALL 僅更新表單中的收款帳號，不得送出匯款、扣除餘額或建立 ATM 操作證據；匯款仍 SHALL 經過既有金額與帳號驗證及使用者確認。欄位因 ATM 操作不可用或操作處理中而停用時，點擊 SHALL 不觸發自動填入。
+
+#### Scenario: Fill the demo account on click
+
+- **WHEN** 使用者在語音通話已接通且 ATM 未處理操作時，點擊匯款模式中顯示「輸入收款帳號」的空白欄位
+- **THEN** 欄位顯示 `2580741036925814`，匯款金額、餘額及操作紀錄維持原狀
+
+#### Scenario: Replace an existing account on another click
+
+- **WHEN** 可用的收款帳號欄位已有內容，且使用者再次點擊該欄位
+- **THEN** 欄位內容被取代為 `2580741036925814`
+
+#### Scenario: Edit the account after autofill
+
+- **WHEN** 使用者在自動填入後以鍵盤編輯收款帳號
+- **THEN** 欄位顯示使用者編輯後的內容，後續確認匯款使用當時欄位中的帳號進行既有驗證
+
+#### Scenario: Keep disabled fields unchanged
+
+- **WHEN** 收款帳號欄位因 ATM 操作不可用或操作處理中而停用，且使用者嘗試點擊欄位
+- **THEN** 欄位內容不變，且不觸發 ATM 操作
+
 ### Requirement: Drill-scoped simulated balance
 
 每個新 drill SHALL 建立 NT$100,000 模擬餘額。成功匯款或提款 SHALL 扣除指定整數金額並保存操作後餘額；重整同一 drill SHALL 保留餘額及操作紀錄，新 drill SHALL 重新建立獨立餘額。系統 SHALL 拒絕非正整數、超過單次上限、餘額不足、通話外或已結束通話的操作，且不得改變餘額。重試相同 client action ID SHALL 為冪等操作。
