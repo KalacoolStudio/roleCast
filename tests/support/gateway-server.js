@@ -20,6 +20,7 @@ const server = createServer((req, res) => {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "private, no-store",
+      Connection: "keep-alive",
     });
     res.write('data: {"first":true}\n\n');
     streams.add(res);

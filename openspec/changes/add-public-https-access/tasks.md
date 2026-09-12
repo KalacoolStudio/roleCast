@@ -12,8 +12,10 @@
 
 - [x] 2.4 Allow bounded cold-start overhead in the host test subprocess and surface spawn errors instead of accepting a null exit status; verify all 18 host lifecycle tests pass.
 
+- [x] 2.5 Disable upstream connection caching to match the proxy’s Connection-close behavior; reproduce a completed SSE stream followed by HTTP 400 and verify the next request succeeds in the real container smoke and production.
+
 ## 3. Live rollout and acceptance
 
 - [x] 3.1 Review and apply a plan that adds the restricted gateway without replacing the VM or data disk; verify the deployed gateway reaches the private upstream using operator authentication and record the generated HTTPS URL.
-- [ ] 3.2 Merge a passing release through the existing main workflow; verify schema-5 migration, backup and retained records, and establish operator ownership of legacy data before anonymous access.
-- [ ] 3.3 Apply the user's selected gateway access mode and verify the real public HTTPS frontend, API, secure workspace cookies, two-browser isolation, streaming/voice transport and blocked direct VM ports; record policy, commit, URL and evidence, and remove temporary resources.
+- [x] 3.2 Merge a passing release through the existing main workflow; verify schema-5 migration, backup and retained records, and establish operator ownership of legacy data before anonymous access.
+- [x] 3.3 Apply the user's selected gateway access mode and verify the real public HTTPS frontend, API, secure workspace cookies, two-browser isolation, streaming/voice transport and blocked direct VM ports; record policy, commit, URL and evidence, and remove temporary resources.

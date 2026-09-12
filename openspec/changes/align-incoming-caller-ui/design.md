@@ -6,7 +6,7 @@ See proposal.md for the reference and requested refinement. `main.jsx` owns the 
 
 - Present incoming calls as a phone-like popup without adding document height, moving the stage/chat, or resetting saved scroll positions.
 - Keep actual caller identity, explicit answer/decline actions, microphone checks, and public disclosures.
-- Do not change backend lifecycle, add ring audio, start media automatically, or introduce a modal dependency.
+- Do not change backend lifecycle, replace the existing ringing tone, open a microphone or provider session automatically, or introduce a modal dependency.
 
 ## Decisions
 
@@ -29,6 +29,14 @@ Use actual public Persona name/role, the interview HR/olive badge, and name-base
 ### Verification
 
 Update caller tests to query dialog semantics and verify open/close/reopen geometry, unchanged document/transcript scroll, keyboard containment and restoration, short-height overflow, and a new assignment opening after a previous dismissal. Keep meaningful acceptance, denial/retry, unavailable voice, and decline-without-media checks. Existing tests that operate the stage or finish controls while ringing must first dismiss the modal. Use the project's fixture provider and synthetic microphone.
+
+### Integration with main
+
+Preserve main's dedicated historical report pages, report timeline, automatic terminal-drill report routing, and revised waiting/desk/office stage positions. The optional background field remains removed from the home UI. Keep the shared voice disclosure needed by the popup while letting `HistoryReports` own report/evidence rendering.
+
+When returning to the already selected drill from another view, retain its current snapshot. The feed remains subscribed to that drill, so clearing the snapshot without changing the drill ID could leave the workspace loading indefinitely until another event arrives.
+
+Main's local incoming-call tone continues while a popup is merely dismissed because the same assignment remains pending. It stops when answering begins, when navigating to reports or the plot editor, and when the pending assignment changes or ends. Reopening a dismissed popup does not create a second tone, microphone, or provider session. Browser helpers decode both drill and report routes; voice-resource assertions distinguish a later call's intended local ring from an ended call's microphone resources.
 
 ## Risks / Trade-offs
 

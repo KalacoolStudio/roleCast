@@ -35,3 +35,20 @@ The earlier inline implementation passed 28 browser tests and 3 follow-up checks
 Tests used the existing fake provider and synthetic microphone. No real-device microphone, paid-provider access, or speech-quality claim is made. No backend, data migration, external assets, or dependencies changed.
 
 The revised proposal, design, two deltas, completed tasks, and this validation record remain under active change `align-incoming-caller-ui` for review. Published specs have not been synchronized and the change has not been archived.
+
+## Main merge validation — 2026-09-12
+
+Integrated `origin/main` at `72faa76` (drill reports and office call staging) into `caller-screen` at `7242c9b` (caller popup UI). Resolved conflicts in `README.md`, `apps/web/src/main.jsx`, and `tests/browser/marketplace.spec.js` while preserving both the modal caller presentation and main's report history, timeline, automatic report routing, revised stage positions, and removed home background input.
+
+The pending-call tone now stops when leaving for reports or the plot editor, continues when only dismissing the popup, and resumes when returning to the pending call. Returning to the already selected drill retains its snapshot instead of clearing it while its existing feed stays subscribed; a regression test reproduced the otherwise indefinite loading state and passes with the fix. No navigation or popup dismissal acquires a microphone or opens a provider session.
+
+Browser helpers support the new report URLs and distinguish local ringing audio from microphone-resource cleanup. The rebuilt merged app passed the full suite after these integration fixes:
+
+- `npm run test:unit` — **231/231 passed** across 19 files.
+- `npm run test:e2e` — **30/30 passed**, including popup layout/accessibility, report history/evidence, office staging, ringing/navigation/resume, ATM, workspace isolation, and voice lifecycle.
+- `npm run build` — passed.
+- `npm run check` — passed (ESLint and Prettier).
+- `openspec validate --all --strict` — **17/17 passed**.
+- `git diff --check` — passed; no conflict markers remain in application, test, or OpenSpec files.
+
+The browser tests still use the fixture provider and synthetic microphone. This active change remains available for review; main's published-spec updates are retained without synchronizing or archiving this popup change.

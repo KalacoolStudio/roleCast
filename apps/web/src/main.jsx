@@ -11,6 +11,8 @@ import "./home.css";
 import { useVoice } from "./use-voice.js";
 import { Conversation } from "./conversation.jsx";
 import { AtmDrawer } from "./AtmDrawer.jsx";
+import { useIncomingCallTone } from "./incoming-call.js";
+import { HistoryReports } from "./HistoryReports.jsx";
 
 const labels = {
   planning: "正在安排對話",
@@ -61,45 +63,80 @@ const date = (value) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+const initialRoute = () => {
+  const hash = location.hash.slice(1);
+  if (hash === "reports") return { reports: true, id: "" };
+  if (hash.startsWith("reports/"))
+    return { reports: true, id: decodeURIComponent(hash.slice(8)) };
+  return { reports: false, id: hash };
+};
 function App() {
+  const initial = useRef(initialRoute()).current;
   const [plots, setPlots] = useState([]),
     [drills, setDrills] = useState([]);
-  const [id, setId] = useState(location.hash.slice(1)),
+  const [id, setId] = useState(initial.id),
     [drill, setDrill] = useState(null);
-  const [plotId, setPlotId] = useState("anti-fraud"),
-    [background, setBackground] = useState("");
+  const [plotId, setPlotId] = useState("anti-fraud");
   const [error, setError] = useState(""),
     [acting, setActing] = useState(false);
   const [stageEvents, setStageEvents] = useState([]);
+  const [reportEvents, setReportEvents] = useState([]);
   const [stageReset, setStageReset] = useState(0);
   const [connection, setConnection] = useState("connecting");
   const feed = useRef(null);
   const [activeId, setActiveId] = useState(null);
   const [managing, setManaging] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showReports, setShowReports] = useState(initial.reports);
   const [deploymentMode, setDeploymentMode] = useState(null);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [dismissedCallId, setDismissedCallId] = useState(null);
   const incomingTrigger = useRef(null);
   const voice = useVoice(id, drill, voiceApi);
+  useIncomingCallTone(
+    !showReports &&
+      !managing &&
+      !showIntro &&
+      drill?.pendingCall &&
+      voice.available &&
+      !voice.active
+      ? `${drill.id}:${drill.pendingCall.assignmentId}`
+      : null,
+  );
   const following = useRef(true);
   const [follow, setFollow] = useState(true);
   const selected = useRef(id),
+    reportsView = useRef(initial.reports),
     transcript = useRef(null);
   const select = useCallback((next) => {
     following.current = true;
     setFollow(true);
     setManaging(false);
     setShowIntro(false);
+    setShowReports(false);
+    reportsView.current = false;
+    if (selected.current !== next) setDrill(null);
     selected.current = next;
     setId(next);
     location.hash = next;
-    setDrill(null);
     setError("");
-    setShowHistory(false);
     setDismissedCallId(null);
   }, []);
+  const openReports = (next = "") => {
+    const sameDrill = selected.current === next;
+    voice.stop();
+    following.current = true;
+    setFollow(true);
+    setManaging(false);
+    setShowIntro(false);
+    setShowReports(true);
+    reportsView.current = true;
+    selected.current = next;
+    setId(next);
+    if (!sameDrill) setDrill(null);
+    setError("");
+    location.hash = next ? `reports/${encodeURIComponent(next)}` : "reports";
+  };
   const loadList = useCallback(async () => {
     const list = await api("/drills");
     setDrills(list.drills);
@@ -125,7 +162,8 @@ function App() {
         if (cancelled) return;
         setDeploymentMode(runtime.deploymentMode);
         setPlots(available);
-        if (!selected.current && list.activeId) select(list.activeId);
+        if (!selected.current && !reportsView.current && list.activeId)
+          select(list.activeId);
       })
       .catch(() => {
         if (!cancelled) setError("無法連線至服務，請確認後端已啟動。");
@@ -166,6 +204,37 @@ function App() {
     };
   }, [id, loadList, workspaceReady]);
   useEffect(() => {
+    if (!drill || !finished(drill.state) || reportsView.current) return;
+    voice.stop();
+    reportsView.current = true;
+    setShowReports(true);
+    location.hash = `reports/${encodeURIComponent(drill.id)}`;
+  }, [drill?.id, drill?.state]);
+  useEffect(() => {
+    let cancelled = false;
+    setReportEvents([]);
+    if (!showReports || !id || !workspaceReady) return;
+    (async () => {
+      let after = 0;
+      const events = [];
+      do {
+        const page = await api(`/drills/${id}/events?after=${after}`);
+        events.push(...page.events);
+        after = page.nextCursor;
+        if (!page.hasMore) break;
+      } while (!cancelled);
+      if (!cancelled && selected.current === id) setReportEvents(events);
+    })().catch(() => {
+      if (!cancelled) setReportEvents([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, showReports, workspaceReady]);
+  useEffect(() => {
+    if (showReports) window.scrollTo({ top: 0 });
+  }, [id, showReports]);
+  useEffect(() => {
     if (following.current && drill?.state === "in_call")
       transcript.current?.scrollTo({ top: transcript.current.scrollHeight });
   }, [drill?.calls.at(-1)?.messages.length, voice.events.length, drill?.state]);
@@ -184,7 +253,7 @@ function App() {
   };
   const start = () =>
     action(async () => {
-      const { id: newId } = await api("/drills", { plotId, background });
+      const { id: newId } = await api("/drills", { plotId });
       select(newId);
     });
   const command = (path, body = {}) =>
@@ -221,10 +290,9 @@ function App() {
       await loadList();
       if (id) await refresh(id);
     });
-  const messages = drill?.calls.flatMap((c) => c.messages) || [];
   return (
     <div className="shell">
-      <aside className={`sidebar ${showHistory ? "history-open" : ""}`}>
+      <aside className="sidebar">
         <a
           className="brand"
           href="#"
@@ -239,7 +307,7 @@ function App() {
           </span>
         </a>
         <button
-          className={`nav-item ${!id && !managing ? "selected" : ""}`}
+          className={`nav-item ${!id && !managing && !showIntro && !showReports ? "selected" : ""}`}
           onClick={() => select("")}
         >
           <span>＋</span> 開始新演練
@@ -249,47 +317,25 @@ function App() {
           onClick={() => {
             voice.stop();
             setShowIntro(false);
+            setShowReports(false);
+            reportsView.current = false;
             setManaging(true);
           }}
         >
           劇本工作室
+        </button>
+        <button
+          className={`nav-item ${showReports ? "selected" : ""}`}
+          onClick={() => openReports("")}
+        >
+          <span aria-hidden="true">▤</span> 歷史報告
+          <small className="nav-count">{drills.length}</small>
         </button>
         {activeId && (
           <button className="nav-item" onClick={() => select(activeId)}>
             <span className="live-dot" /> 繼續目前演練
           </button>
         )}
-        <button
-          className="mobile-history"
-          aria-expanded={showHistory}
-          onClick={() => setShowHistory(!showHistory)}
-        >
-          演練紀錄 {showHistory ? "−" : "＋"}
-        </button>
-        <div className="section-label">
-          演練紀錄 <span>{drills.length.toString().padStart(2, "0")}</span>
-        </div>
-        <div className="history">
-          {drills.length ? (
-            drills.map((s) => (
-              <button
-                key={s.id}
-                className={`history-item ${s.id === id ? "current" : ""}`}
-                onClick={() => select(s.id)}
-              >
-                <strong>{s.plot.name}</strong>
-                <span>{date(s.createdAt)}</span>
-                <small>{labels[s.state]}</small>
-              </button>
-            ))
-          ) : (
-            <p className="empty-history">
-              每一次練習，
-              <br />
-              都會留下一點進步。
-            </p>
-          )}
-        </div>
         <div className="sidebar-foot">
           <span className="live-dot" />
           {deploymentMode === "gcp"
@@ -306,11 +352,13 @@ function App() {
             WORKSPACE <span className="slash">/</span>{" "}
             {managing
               ? "劇本工作室"
-              : showIntro
-                ? "情境示範 · CHAT"
-                : drill
-                  ? "演練現場 · DRILL"
-                  : "劇本練習 · PLOT"}
+              : showReports
+                ? "歷史報告 · REPORTS"
+                : showIntro
+                  ? "情境示範 · CHAT"
+                  : drill
+                    ? "演練現場 · DRILL"
+                    : "劇本練習 · PLOT"}
           </span>
           <span className="topbar-note">Adaptive role orchestration</span>
         </header>
@@ -343,13 +391,23 @@ function App() {
             activeId={activeId}
             onResume={select}
           />
+        ) : showReports ? (
+          <HistoryReports
+            drills={drills}
+            selectedId={id}
+            drill={drill}
+            events={reportEvents}
+            labels={labels}
+            ends={ends}
+            formatDate={date}
+            onSelect={openReports}
+            onStartNew={() => select("")}
+          />
         ) : !id ? (
           <Home
             plots={plots}
             plotId={plotId}
             onSelect={setPlotId}
-            background={background}
-            onBackground={setBackground}
             onStart={() =>
               plotId === "anti-fraud" ? setShowIntro(true) : start()
             }
@@ -587,52 +645,6 @@ function App() {
                 )}
               </div>
             </div>
-            {drill.report && (
-              <section className="report">
-                <div className="eyebrow">REFLECT & GROW</div>
-                <h2>這次練習，你帶走了什麼？</h2>
-                <p className="summary">{drill.report.summary}</p>
-                {drill.report.insufficientEvidence && (
-                  <p className="evidence-note">
-                    目前證據不足，部分面向尚無法評估。
-                  </p>
-                )}
-                <div className="dimensions">
-                  {drill.report.dimensions.map((d, i) => (
-                    <article key={i}>
-                      <h3>{d.name}</h3>
-                      <p>{d.assessment}</p>
-                      <Evidence ids={d.evidenceIds} messages={messages} />
-                    </article>
-                  ))}
-                </div>
-                <div className="feedback-grid">
-                  <Findings
-                    title="做得好的地方"
-                    items={drill.report.strengths}
-                    messages={messages}
-                  />
-                  <Findings
-                    title="下一次可以試試"
-                    items={drill.report.improvements}
-                    messages={messages}
-                  />
-                </div>
-                {drill.report.uncertainties.length > 0 && (
-                  <div className="uncertainties">
-                    <h3>仍需要更多練習的觀察</h3>
-                    <ul>
-                      {drill.report.uncertainties.map((v, i) => (
-                        <li key={i}>{v}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <button className="primary" onClick={() => select("")}>
-                  開始下一次練習 ↗
-                </button>
-              </section>
-            )}
             <AtmDrawer
               drill={drill}
               call={call}
@@ -661,48 +673,6 @@ function VoiceDisclosure({ drill, deploymentMode }) {
       秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
       逐字稿可能不完整，播放狀態不代表整句已聽完。
     </small>
-  );
-}
-function Evidence({ ids, messages }) {
-  return (
-    <div className="evidence">
-      {ids.map((id) => {
-        const m = messages.find((v) => v.id === id);
-        return m ? (
-          <a
-            key={id}
-            href={`#message-${id}`}
-            onClick={(event) => {
-              event.preventDefault();
-              const target = document.getElementById(`message-${id}`);
-              const detail = target?.closest("details");
-              if (detail) detail.open = true;
-              target?.scrollIntoView({ behavior: "smooth" });
-            }}
-          >
-            「{m.text.slice(0, 60)}
-            {m.text.length > 60 ? "…" : ""}」
-          </a>
-        ) : null;
-      })}
-    </div>
-  );
-}
-function Findings({ title, items, messages }) {
-  return (
-    <div>
-      <h3>{title}</h3>
-      {items.length ? (
-        items.map((v, i) => (
-          <div className="finding" key={i}>
-            <p>{v.text}</p>
-            <Evidence ids={v.evidenceIds} messages={messages} />
-          </div>
-        ))
-      ) : (
-        <p className="hint">尚無足夠紀錄。</p>
-      )}
-    </div>
   );
 }
 createRoot(document.getElementById("root")).render(

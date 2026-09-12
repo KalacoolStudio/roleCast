@@ -7,3 +7,7 @@
 
 - [x] 2.1 Update browser selectors and README labels for 「接聽」/「拒接」; verify the browser suite, production build, and lint/format checks pass.
 - [x] 2.2 Record screenshots, behavioral results, and verification limits in validation.md; verify strict OpenSpec validation and git diff --check, keeping the completed change active for review.
+
+## 3. Main integration
+
+- [x] 3.1 Resolve main's report-routing and removed-background conflicts while retaining the popup, ringing lifecycle, and office staging; verify the combined unit/browser suites, build, lint/format, and strict OpenSpec validation, then record merge evidence.

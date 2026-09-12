@@ -33,8 +33,6 @@ export function Home({
   plots,
   plotId,
   onSelect,
-  background,
-  onBackground,
   onStart,
   acting,
   activeId,
@@ -117,19 +115,6 @@ export function Home({
         <p className="scenario-hint" aria-live="polite">
           {plot?.description || "選擇一個劇本，開始你的對話練習。"}
         </p>
-        <div className="setup">
-          <label htmlFor="background">
-            讓練習更貼近你 <span>選填</span>
-          </label>
-          <textarea
-            id="background"
-            value={background}
-            onChange={(event) => onBackground(event.target.value)}
-            placeholder="說說你的經驗，或這次想加強的地方…"
-            maxLength={2000}
-            rows={2}
-          />
-        </div>
         <div className="scenario-meta">
           <span>多角色動態登場</span>
           <span>即時語音互動</span>

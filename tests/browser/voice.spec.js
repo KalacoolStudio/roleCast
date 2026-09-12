@@ -18,6 +18,9 @@ test.beforeEach(async ({ page }) => {
       captures: 0,
       outputs: 0,
       permissions: 0,
+      ringOscillators: [],
+      ringContexts: new Set(),
+      ringStops: 0,
     };
     const acquire = navigator.mediaDevices.getUserMedia.bind(
       navigator.mediaDevices,
@@ -33,6 +36,17 @@ test.beforeEach(async ({ page }) => {
       constructor(...args) {
         super(...args);
         window.voiceTest.contexts.push(this);
+      }
+      createOscillator(...args) {
+        window.voiceTest.ringContexts.add(this);
+        const oscillator = super.createOscillator(...args);
+        const stop = oscillator.stop.bind(oscillator);
+        oscillator.stop = (...stopArgs) => {
+          window.voiceTest.ringStops++;
+          return stop(...stopArgs);
+        };
+        window.voiceTest.ringOscillators.push(oscillator);
+        return oscillator;
       }
     };
     const Worklet = window.AudioWorkletNode;
@@ -67,7 +81,9 @@ const stats = async (request) =>
   (await request.get("/api/__test/voice")).json();
 const control = (request, data) => request.post("/api/__test/voice", { data });
 async function currentDrill(page) {
-  const id = new URL(page.url()).hash.slice(1);
+  const id = decodeURIComponent(
+    new URL(page.url()).hash.slice(1).replace(/^reports\//, ""),
+  );
   return (await page.request.get(`/api/drills/${id}`)).json();
 }
 async function start(page) {
@@ -81,7 +97,9 @@ async function released(page) {
       page.evaluate(
         () =>
           window.voiceTest.tracks.every((t) => t.readyState === "ended") &&
-          window.voiceTest.contexts.every((c) => c.state === "closed"),
+          window.voiceTest.contexts.every(
+            (c) => window.voiceTest.ringContexts.has(c) || c.state === "closed",
+          ),
       ),
     )
     .toBe(true);
@@ -409,6 +427,49 @@ test("voice-only calls save speech automatically and keep text controls absent",
   await expect(page.locator(".report")).toBeVisible();
   expect((await currentDrill(page)).calls).toEqual([previous]);
   expect((await stats(page.request)).attempts).toBe(beforeDecline);
+});
+test("incoming ringing survives popup dismissal and stops on navigation or answer", async ({
+  page,
+}) => {
+  await start(page);
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringOscillators.length))
+    .toBe(2);
+  const before = (await stats(page.request)).attempts;
+  await page.getByRole("button", { name: "收合來電視窗" }).click();
+  expect(await page.evaluate(() => window.voiceTest.ringStops)).toBe(0);
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "歷史報告", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringStops))
+    .toBe(2);
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+  await page.getByRole("button", { name: /繼續目前演練/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringOscillators.length))
+    .toBe(4);
+  await page.getByRole("button", { name: "收合來電視窗" }).click();
+  await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringStops))
+    .toBe(4);
+  expect((await stats(page.request)).attempts).toBe(before);
+  expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(0);
+  await page.getByRole("button", { name: /繼續目前演練/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringOscillators.length))
+    .toBe(6);
+  await page.getByRole("button", { name: "接聽" }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringStops))
+    .toBe(6);
+  await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
+  await page.getByRole("button", { name: "掛斷本通" }).click();
+  await released(page);
 });
 test("ATM drawer updates the drill balance and sends transfer and withdrawal evidence", async ({
   page,

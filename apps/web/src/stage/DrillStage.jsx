@@ -190,7 +190,7 @@ export function DrillStage({ drill, events, resetKey, connection }) {
       <div className="stage-canvas" data-phase={scene.phase}>
         <div className="stage-map">
           <span className="stage-location stage-boss-desk">調度區</span>
-          <span className="stage-location stage-call-desk">通話區</span>
+          <span className="stage-location stage-call-desk">辦公桌</span>
           <span className="stage-entrance">入口 →</span>
           <span className="stage-waiting">候場</span>
           <span className="stage-report-spot">回報位</span>

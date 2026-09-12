@@ -29,5 +29,5 @@ None.
 
 ## Non-goals
 
-- Adding a skipped-call lifecycle, ring audio, timed auto-answer, or changing active-call controls.
+- Adding a skipped-call lifecycle, changing the existing ringing tone, timed auto-answer, or changing active-call controls.
 - Hard-coding prototype caller names or importing its simulated call completion logic.

@@ -16,7 +16,7 @@
 
 ### Requirement: Planning and persona arrival
 
-當 Mastermind 規劃時，舞台 SHALL 顯示思考狀態。角色指派成功後 SHALL 顯示對應 Persona 從邊界經候場位置進入通話區；使用者 SHALL 明確接通後才啟動對話。動畫 SHALL 不自行接通或呼叫模型。
+當 Mastermind 規劃時，舞台 SHALL 顯示思考狀態。角色指派成功後 SHALL 顯示對應 Persona 從邊界進入候場位置；使用者 SHALL 明確接通後 Persona 才前往辦公桌並啟動對話。動畫 SHALL 不自行接通或呼叫模型。
 
 #### Scenario: First assignment
 - **WHEN** 第一通規劃成功建立 Persona 並等待接通
@@ -40,11 +40,11 @@ Mastermind SHALL 使用老闆素材，Judge SHALL 使用秘書素材；每個 Pe
 
 ### Requirement: Call supervision and recap handoff
 
-通話時 Persona SHALL 位於通話區，Judge SHALL 位於旁邊監看。通話結束後 Persona SHALL 離場，Judge SHALL 前往 Mastermind 旁整理與回報；只有真實回顧完成後 SHALL 顯示交付完成。後續規劃 SHALL 顯示 Mastermind 再次思考，並允許重複此循環。
+通話時 Persona SHALL 位於辦公桌，Judge SHALL 位於桌旁監看。通話結束後 Persona SHALL 移至辦公室內的非通話位置並留在場內，Judge SHALL 前往 Mastermind 旁整理與回報；只有真實回顧完成後 SHALL 顯示交付完成。後續規劃 SHALL 顯示 Mastermind 再次思考，並允許重複此循環。
 
 #### Scenario: User hangs up one call
 - **WHEN** 使用者掛斷本通但未結束整場
-- **THEN** 輸入立即停止，Persona 離場、Judge 整理並前往回報位，回顧完成後交付，再依真實狀態顯示下輪規劃或報告
+- **THEN** 輸入立即停止，Persona 離開辦公桌但留在辦公室、Judge 整理並前往回報位，回顧完成後交付，再依真實狀態顯示下輪規劃或報告
 
 #### Scenario: Recap remains pending or fails
 - **WHEN** Judge 已走到回報位置但回顧仍未完成，或模型回顧失敗
