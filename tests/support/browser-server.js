@@ -113,7 +113,10 @@ app.post("/__test/voice", async (req) => {
   }
   return { ok: true };
 });
-await app.listen({ host: "127.0.0.1", port: 3100 });
+await app.listen({
+  host: "127.0.0.1",
+  port: Number(process.env.ROLECAST_TEST_PORT || 3100),
+});
 for (const signal of ["SIGINT", "SIGTERM"])
   process.once(signal, async () => {
     await app.close();

@@ -14,9 +14,20 @@ export function createVoiceRelay(
   });
   const allowed = (origin, host) => {
     const port = server.address()?.port;
+    let loopbackTunnel = false;
+    try {
+      const url = new URL(origin);
+      loopbackTunnel =
+        url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) &&
+        origin === `http://${host}`;
+    } catch {
+      // A malformed Origin must not authorize a voice connection.
+    }
     return (
       typeof origin === "string" &&
-      (origin === `https://${host}` ||
+      (loopbackTunnel ||
+        origin === `https://${host}` ||
         [
           ...frontendOrigins,
           `http://127.0.0.1:${port}`,

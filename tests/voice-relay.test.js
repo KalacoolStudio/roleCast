@@ -102,42 +102,55 @@ it.each(["drills", "sessions"])(
     expect(h.store.get(h.id).messages.at(-1).text).toBe("自動保存");
   },
 );
-it("supports same-host HTTPS tunnels for voice without trusting a forwarded host", async () => {
-  const h = await setup("drills");
-  const origin = "https://rolecast.example.test";
-  const spoofed = {
-    origin,
-    host: "localhost",
-    "x-forwarded-host": "rolecast.example.test",
-  };
-  expect(
-    (
-      await h.app.inject({
-        method: "POST",
-        url: h.url,
-        headers: spoofed,
-        payload: { requestId: "spoof" },
-      })
-    ).statusCode,
-  ).toBe(403);
-  const rejected = new WebSocket(
-    `${h.origin.replace("http:", "ws:")}${h.url}/fake`,
-    { headers: spoofed },
-  );
-  await expect(once(rejected, "open")).rejects.toThrow(/403/);
-  const headers = { host: "rolecast.example.test" };
-  const response = await h.app.inject({
-    method: "POST",
-    url: h.url,
-    headers: { ...headers, origin },
-    payload: { requestId: "tunnel" },
-  });
-  expect(response.statusCode).toBe(201);
-  const { ws } = await h.connect(response.json(), origin, h.origin, headers);
-  ws.send(Buffer.alloc(1920));
-  await until(() => h.client.connections[0].inputs.length === 1);
-  ws.close();
-});
+it.each([
+  {
+    label: "same-host HTTPS",
+    origin: "https://rolecast.example.test",
+    host: "rolecast.example.test",
+  },
+  {
+    label: "IAP loopback HTTP",
+    origin: "http://127.0.0.1:18080",
+    host: "127.0.0.1:18080",
+  },
+])(
+  "supports $label tunnels for voice without trusting a forwarded host",
+  async ({ origin, host }) => {
+    const h = await setup("drills");
+    const spoofed = {
+      origin,
+      host: "localhost",
+      "x-forwarded-host": host,
+    };
+    expect(
+      (
+        await h.app.inject({
+          method: "POST",
+          url: h.url,
+          headers: spoofed,
+          payload: { requestId: "spoof" },
+        })
+      ).statusCode,
+    ).toBe(403);
+    const rejected = new WebSocket(
+      `${h.origin.replace("http:", "ws:")}${h.url}/fake`,
+      { headers: spoofed },
+    );
+    await expect(once(rejected, "open")).rejects.toThrow(/403/);
+    const headers = { host };
+    const response = await h.app.inject({
+      method: "POST",
+      url: h.url,
+      headers: { ...headers, origin },
+      payload: { requestId: "tunnel" },
+    });
+    expect(response.statusCode).toBe(201);
+    const { ws } = await h.connect(response.json(), origin, h.origin, headers);
+    ws.send(Buffer.alloc(1920));
+    await until(() => h.client.connections[0].inputs.length === 1);
+    ws.close();
+  },
+);
 it.each([
   Buffer.alloc(3),
   JSON.stringify({ type: "caption", speaker: "persona", text: "forged" }),

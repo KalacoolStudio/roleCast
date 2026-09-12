@@ -16,6 +16,7 @@ import {
   plotDefinitionSchema,
 } from "../../core/src/plot-contracts.js";
 
+export const databaseSchemaVersion = 4;
 const collections = [
   "personas",
   "assignments",
@@ -32,7 +33,7 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     const version = this.db.pragma("user_version", { simple: true });
     this.listeners = new Set();
-    if (version > 4) {
+    if (version > databaseSchemaVersion) {
       this.db.close();
       throw new Error("資料庫版本較新，請使用相容的程式。");
     }
