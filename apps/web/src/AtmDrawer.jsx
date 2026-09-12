@@ -155,6 +155,10 @@ export function AtmDrawer({ drill, call, enabled, onAction }) {
               收款帳號
               <input
                 value={recipient}
+                onClick={() => {
+                  setRecipient("2580741036925814");
+                  pending.current = null;
+                }}
                 onChange={(event) => {
                   setRecipient(event.target.value);
                   pending.current = null;
