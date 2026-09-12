@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import staticPlugin from "@fastify/static";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { AppError } from "../../../packages/core/src/contracts.js";
 import { publicPlot } from "../../../packages/core/src/plot-contracts.js";
 import { VoiceCoordinator, voiceError } from "./voice.js";
@@ -17,6 +18,7 @@ export async function createApp(
     liveClient,
     voiceOptions,
     frontendOrigins,
+    testWorkspaceToken,
   } = {},
 ) {
   if (!["local", "gcp"].includes(deploymentMode))
@@ -31,7 +33,33 @@ export async function createApp(
     settings: voice,
     client: liveClient,
   });
-  const relay = createVoiceRelay(app.server, media, frontendOrigins);
+  const cookieName = "role_cast_workspace";
+  const tokenHash = (token) => createHash("sha256").update(token).digest("hex");
+  const cookieToken = (header = "") => {
+    for (const part of header.split(";")) {
+      const [name, ...value] = part.trim().split("=");
+      if (name === cookieName) {
+        const token = value.join("=");
+        if (/^[a-zA-Z0-9_-]{43}$/.test(token)) return token;
+      }
+    }
+    return null;
+  };
+  const testWorkspaceId = testWorkspaceToken
+    ? engine.store.claimWorkspace(tokenHash(testWorkspaceToken))
+    : null;
+  if (testWorkspaceId) engine.ensureWorkspace(testWorkspaceId);
+  const workspaceFor = (headers) => {
+    if (testWorkspaceId) return testWorkspaceId;
+    const token = cookieToken(headers.cookie);
+    return token ? engine.store.workspace(tokenHash(token)) : null;
+  };
+  const relay = createVoiceRelay(
+    app.server,
+    media,
+    frontendOrigins,
+    (request) => workspaceFor(request.headers),
+  );
   app.decorate("voice", media);
   const body = (properties, required) => ({
     schema: {
@@ -85,6 +113,23 @@ export async function createApp(
           .code(403)
           .send({ code: "FORBIDDEN", message: "不允許此請求來源。" });
     }
+    if (
+      request.url.startsWith("/api/") &&
+      ![
+        "/api/health",
+        "/api/runtime",
+        "/api/capabilities",
+        "/api/workspace",
+      ].includes(request.url.split("?")[0])
+    ) {
+      request.workspaceId = workspaceFor(request.headers);
+      if (!request.workspaceId)
+        return reply.code(401).send({
+          code: "WORKSPACE_REQUIRED",
+          message: "請重新整理頁面以建立私人工作區。",
+        });
+      reply.header("Cache-Control", "private, no-store");
+    }
   });
   app.get("/api/health", async () => {
     engine.store.db.prepare("SELECT 1").get();
@@ -92,16 +137,40 @@ export async function createApp(
   });
   app.get("/api/runtime", async () => ({ deploymentMode }));
   app.get("/api/capabilities", async () => ({ voice: media.capabilities() }));
-  app.get("/api/plots", async () => engine.store.listPlots().map(publicPlot));
-  app.get("/api/plots/:id", async (req) => engine.store.getPlot(req.params.id));
+  app.get("/api/workspace", async (req, reply) => {
+    let workspaceId = workspaceFor(req.headers);
+    if (!workspaceId) {
+      const token = randomBytes(32).toString("base64url");
+      workspaceId = engine.store.claimWorkspace(tokenHash(token));
+      const loopbackHost = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
+        req.headers.host || "",
+      );
+      const secure =
+        req.protocol === "https" ||
+        (!loopbackHost && req.headers["x-forwarded-proto"] === "https");
+      reply.header(
+        "Set-Cookie",
+        `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=31536000${secure ? "; Secure" : ""}`,
+      );
+    }
+    engine.ensureWorkspace(workspaceId);
+    reply.header("Cache-Control", "private, no-store");
+    return { ready: true };
+  });
+  app.get("/api/plots", async (req) =>
+    engine.store.listPlots(req.workspaceId).map(publicPlot),
+  );
+  app.get("/api/plots/:id", async (req) =>
+    engine.store.getPlot(req.params.id, req.workspaceId),
+  );
   app.post("/api/plots", { bodyLimit: 262144 }, async (req, reply) =>
-    reply.code(201).send(engine.store.createPlot(req.body)),
+    reply.code(201).send(engine.store.createPlot(req.body, req.workspaceId)),
   );
   app.put("/api/plots/:id", { bodyLimit: 262144 }, async (req) =>
-    engine.store.updatePlot(req.params.id, req.body),
+    engine.store.updatePlot(req.params.id, req.body, req.workspaceId),
   );
-  app.get("/api/scenarios", async () =>
-    engine.store.listPlots().map(publicPlot),
+  app.get("/api/scenarios", async (req) =>
+    engine.store.listPlots(req.workspaceId).map(publicPlot),
   );
   for (const resource of ["drills", "sessions"]) {
     const legacy = resource === "sessions";
@@ -111,9 +180,9 @@ export async function createApp(
       const { plot, ...rest } = drill;
       return { ...rest, scenario: plot };
     };
-    app.get(`/api/${resource}`, async () => ({
-      [resource]: engine.list().map(project),
-      activeId: engine.store.active() || null,
+    app.get(`/api/${resource}`, async (req) => ({
+      [resource]: engine.list(req.workspaceId).map(project),
+      activeId: engine.store.active(req.workspaceId) || null,
     }));
     app.post(
       `/api/${resource}`,
@@ -128,12 +197,13 @@ export async function createApp(
         const id = engine.start(
           req.body?.[plotKey],
           req.body?.background ?? "",
+          req.workspaceId,
         );
         return reply.code(202).send({ id });
       },
     );
     app.get(`/api/${resource}/:id`, async (req) =>
-      project(engine.view(req.params.id)),
+      project(engine.view(req.params.id, req.workspaceId)),
     );
     app.post(
       `/api/${resource}/:id/calls/accept`,
@@ -154,6 +224,7 @@ export async function createApp(
             req.params.id,
             req.body.assignmentId,
             req.body.mode,
+            req.workspaceId,
           ),
         });
       },
@@ -166,7 +237,12 @@ export async function createApp(
         return reply
           .code(201)
           .send(
-            media.reserve(req.params.id, req.params.callId, req.body.requestId),
+            media.reserve(
+              req.params.id,
+              req.params.callId,
+              req.body.requestId,
+              req.workspaceId,
+            ),
           );
       },
     );
@@ -186,19 +262,25 @@ export async function createApp(
             req.params.callId,
             req.body?.clientMessageId,
             req.body?.text,
+            req.workspaceId,
           ),
         }),
     );
     app.post(`/api/${resource}/:id/calls/:callId/hangup`, async (req) => {
-      engine.closeCall(req.params.id, req.params.callId);
+      engine.closeCall(
+        req.params.id,
+        req.params.callId,
+        "user",
+        req.workspaceId,
+      );
       return { ok: true };
     });
     app.post(`/api/${resource}/:id/finish`, async (req) => {
-      engine.finish(req.params.id);
+      engine.finish(req.params.id, req.workspaceId);
       return { ok: true };
     });
     app.get(`/api/${resource}/:id/report`, async (req, reply) => {
-      const s = engine.view(req.params.id);
+      const s = engine.view(req.params.id, req.workspaceId);
       return reply
         .code(s.report ? 200 : 202)
         .send({ state: s.state, report: s.report });

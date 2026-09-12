@@ -209,7 +209,6 @@ test("plot editor copies, edits three prompts, exports/imports and launches an i
 
 test("new plot authoring validates imports and preserves drafts on conflicts", async ({
   page,
-  request,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
@@ -230,14 +229,14 @@ test("new plot authoring validates imports and preserves drafts on conflicts", a
   await page.getByLabel("停止條件").fill("已說明事實並提出下一步。");
   await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");
-  const plots = await (await request.get("/api/plots")).json();
+  const plots = await (await page.request.get("/api/plots")).json();
   const plot = await (
-    await request.get(
+    await page.request.get(
       `/api/plots/${plots.find((p) => p.name === "危機溝通").id}`,
     )
   ).json();
   const { id, ...body } = plot;
-  await request.put(`/api/plots/${id}`, {
+  await page.request.put(`/api/plots/${id}`, {
     data: { ...body, name: "其他分頁改過" },
   });
   await page.getByLabel("Reporter prompt").fill("不可遺失的草稿");

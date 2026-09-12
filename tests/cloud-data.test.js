@@ -46,7 +46,7 @@ it("backs up committed WAL data without interrupting the active exercise", async
     commit: "fixture",
     image: "fixture-image",
   });
-  expect(manifest.schema).toBe(4);
+  expect(manifest.schema).toBe(5);
   expect(h.store.get(id)).toEqual(before);
   const backup = new Database(target, { readonly: true });
   expect(

@@ -7,15 +7,15 @@
 ## Requirements
 
 ### Requirement: Scenario based sessions
-系統 SHALL 提供防詐與模擬面試兩個內建劇本，並允許選擇自訂劇本。既有 scenario／session 用語 SHALL 以 plot／drill 呈現並保留相容 API。每個情境 SHALL 定義背景事實、演練目標、Judge 評估準則、停止條件與通話上限。使用者 SHALL 能選擇情境並提供選填的受測者背景。系統 SHALL 同時只允許一場非終止演練。
+系統 SHALL 提供防詐與模擬面試兩個內建劇本，並允許選擇自訂劇本。既有 scenario／session 用語 SHALL 以 plot／drill 呈現並保留相容 API。每個情境 SHALL 定義背景事實、演練目標、Judge 評估準則、停止條件與通話上限。使用者 SHALL 能選擇情境並提供選填的受測者背景。系統 SHALL 在每個私人工作區內同時只允許一場非終止演練，不同工作區可同時進行。
 
 #### Scenario: Start an exercise
 - **WHEN** 使用者選擇有效情境開始演練，且沒有其他進行中的演練
 - **THEN** 系統建立獨立演練 ID，保存該次情境設定快照，並由 Mastermind 規劃第一通
 
 #### Scenario: Concurrent start
-- **WHEN** 另一場演練尚未結束時再次要求開始
-- **THEN** 系統拒絕建立第二場，並提供既有演練的識別資訊
+- **WHEN** 同一工作區的另一場演練尚未結束時再次要求開始
+- **THEN** 系統拒絕建立第二場，並提供該工作區既有演練的識別資訊；其他工作區不受影響
 
 ### Requirement: Planning only between calls
 Mastermind SHALL 僅於第一通前與完成通話回顧後決策。其輸出 SHALL 為建立角色並指派、重用既有角色並指派或結束演練；指派 SHALL 包含任務目標與 Allowed Facts。每場 SHALL 固定使用建立時保存的劇本與有效角色指引，包含 Mastermind、Judge 及 Reporter 設定。

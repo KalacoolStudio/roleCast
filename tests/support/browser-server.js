@@ -85,7 +85,7 @@ const app = await createApp(engine, {
   voiceOptions: { checkpointMs: 100, closeMs: 100 },
 });
 // Test-only controls; production never imports this server or its fake provider.
-app.get("/__test/voice", async () => ({
+app.get("/api/__test/voice", async () => ({
   attempts: liveClient.connections.length,
   connections: liveClient.connections.map((c) => ({
     frames: c.inputs.length,
@@ -95,7 +95,7 @@ app.get("/__test/voice", async () => ({
     nonzero: c.inputs.some((b) => b.some((v) => v !== 0)),
   })),
 }));
-app.post("/__test/voice", async (req) => {
+app.post("/api/__test/voice", async (req) => {
   const connection = liveClient.connections.at(-1);
   if (req.body.action === "say")
     say(connection, req.body.text, req.body.speaker);
@@ -107,7 +107,7 @@ app.post("/__test/voice", async (req) => {
     });
   else if (req.body.action === "disconnect") connection.disconnect();
   else if (req.body.action === "duration") {
-    const s = store.get(req.body.id);
+    const s = store.get(req.body.id, req.workspaceId);
     s.plot.maxVoiceSecondsPerCall = req.body.seconds;
     store.save(s);
   }

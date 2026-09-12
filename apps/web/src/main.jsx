@@ -73,6 +73,7 @@ function App() {
   const [managing, setManaging] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [deploymentMode, setDeploymentMode] = useState(null);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
   const voice = useVoice(id, drill, voiceApi);
   const following = useRef(true);
   const [follow, setFollow] = useState(true);
@@ -105,7 +106,11 @@ function App() {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api("/plots"), loadList(), api("/runtime")])
+    api("/workspace")
+      .then(() => {
+        if (!cancelled) setWorkspaceReady(true);
+        return Promise.all([api("/plots"), loadList(), api("/runtime")]);
+      })
       .then(([available, list, runtime]) => {
         if (cancelled) return;
         setDeploymentMode(runtime.deploymentMode);
@@ -120,7 +125,7 @@ function App() {
     };
   }, [loadList, select]);
   useEffect(() => {
-    if (!id) return;
+    if (!id || !workspaceReady) return;
     const connection = connectDrill({
       id,
       getSnapshot: () => api(`/drills/${id}`),
@@ -149,7 +154,7 @@ function App() {
       connection.close();
       if (feed.current === connection) feed.current = null;
     };
-  }, [id, loadList]);
+  }, [id, loadList, workspaceReady]);
   useEffect(() => {
     if (following.current && drill?.state === "in_call")
       transcript.current?.scrollTo({ top: transcript.current.scrollHeight });
@@ -194,6 +199,8 @@ function App() {
     });
   const retry = () =>
     action(async () => {
+      await api("/workspace");
+      setWorkspaceReady(true);
       setDeploymentMode((await api("/runtime")).deploymentMode);
       setPlots(await api("/plots"));
       await loadList();
@@ -272,7 +279,7 @@ function App() {
         <div className="sidebar-foot">
           <span className="live-dot" />
           {deploymentMode === "gcp"
-            ? "雲端共用工作空間"
+            ? "雲端私人工作區"
             : deploymentMode === "local"
               ? "本機工作空間"
               : "正在連線…"}
@@ -374,7 +381,7 @@ function App() {
             <div className="start-row">
               <p className="privacy">
                 {deploymentMode === "gcp"
-                  ? "紀錄保存在 GCP，並與此工作空間的授權使用者共用。"
+                  ? "紀錄保存在 GCP，並與其他瀏覽器工作區隔離。"
                   : deploymentMode === "local"
                     ? "紀錄保存在本機。"
                     : "正在確認紀錄儲存位置。"}
@@ -607,7 +614,7 @@ function App() {
                     <small>
                       語音會傳送至 OpenAI；
                       {deploymentMode === "gcp"
-                        ? "逐字稿保存在 GCP，並與授權使用者共用。"
+                        ? "逐字稿保存在 GCP 私人工作區。"
                         : deploymentMode === "local"
                           ? "本機僅保存逐字稿。"
                           : "逐字稿儲存位置確認中。"}

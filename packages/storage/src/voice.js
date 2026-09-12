@@ -158,7 +158,7 @@ export class VoiceRecords {
       );
     return fragment;
   }
-  checkpoint(sessionId, voiceId, final = false) {
+  checkpoint(sessionId, voiceId, final = false, ownerId) {
     return this.db.transaction(() => {
       const attempt = this.get(sessionId, voiceId);
       const pending = this.fragments(sessionId, voiceId, true);
@@ -200,7 +200,7 @@ export class VoiceRecords {
         }
         consumed.push(...sources);
       }
-      const s = this.store.get(sessionId);
+      const s = this.store.get(sessionId, ownerId);
       const messages = groups
         .filter((group) => group.text.trim())
         .sort((a, b) => a.first - b.first)

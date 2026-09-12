@@ -192,7 +192,7 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
     store.close();
   });
   store.recover();
-  expect(store.db.pragma("user_version", { simple: true })).toBe(4);
+  expect(store.db.pragma("user_version", { simple: true })).toBe(5);
   expect(store.get(id).prompts).toEqual(completed.prompts);
   expect(store.get(id).messages).toEqual(completed.messages);
   expect(store.get(id).report).toEqual(completed.report);
@@ -203,7 +203,10 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
 
 it("supports canonical authoring/drill APIs and legacy lifecycle without leaking prompts in public views", async () => {
   const h = harness();
-  const app = await createApp(h.engine, { webRoot: "/missing" });
+  const app = await createApp(h.engine, {
+    webRoot: "/missing",
+    testWorkspaceToken: "plots-test",
+  });
   cleanups.push(() => app.close());
   const before = h.store.listPlots().length;
   expect(

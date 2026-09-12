@@ -50,20 +50,21 @@ test.beforeEach(async ({ page }) => {
     };
   });
 });
-test.afterEach(async ({ request }) => {
-  const { activeId } = await (await request.get("/api/sessions")).json();
+test.afterEach(async ({ page }) => {
+  const { activeId } = await (await page.request.get("/api/sessions")).json();
   if (activeId) {
-    await request.post(`/api/sessions/${activeId}/finish`, { data: {} });
+    await page.request.post(`/api/sessions/${activeId}/finish`, { data: {} });
     await expect
       .poll(
         async () =>
-          (await (await request.get("/api/sessions")).json()).activeId,
+          (await (await page.request.get("/api/sessions")).json()).activeId,
       )
       .toBeNull();
   }
 });
-const stats = async (request) => (await request.get("/__test/voice")).json();
-const control = (request, data) => request.post("/__test/voice", { data });
+const stats = async (request) =>
+  (await request.get("/api/__test/voice")).json();
+const control = (request, data) => request.post("/api/__test/voice", { data });
 async function start(page) {
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
@@ -101,7 +102,6 @@ test("voice-only home blocks drills when voice is unavailable", async ({
 });
 test("voice-only calls save speech automatically and keep text controls absent", async ({
   page,
-  request,
 }) => {
   await page.route("**/api/runtime", (route) =>
     route.fulfill({ json: { deploymentMode: "gcp" } }),
@@ -112,7 +112,7 @@ test("voice-only calls save speech automatically and keep text controls absent",
   ).toHaveCount(0);
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.locator(".voice-panel small")).toContainText(
-    "逐字稿保存在 GCP，並與授權使用者共用",
+    "逐字稿保存在 GCP 私人工作區",
   );
   await expect(page.locator(".voice-panel small")).not.toContainText("本機");
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
@@ -131,24 +131,24 @@ test("voice-only calls save speech automatically and keep text controls absent",
       ),
     )
     .toBe(true);
-  expect((await stats(request)).connections.at(-1).greetings).toBe(1);
+  expect((await stats(page.request)).connections.at(-1).greetings).toBe(1);
   await expect
-    .poll(async () => (await stats(request)).connections.at(-1).nonzero)
+    .poll(async () => (await stats(page.request)).connections.at(-1).nonzero)
     .toBe(true);
   await page.getByRole("button", { name: "麥克風靜音", exact: true }).click();
   await expect(page.getByText("麥克風已靜音", { exact: true })).toBeVisible();
-  const frames = (await stats(request)).connections.at(-1).frames;
+  const frames = (await stats(page.request)).connections.at(-1).frames;
   await page.waitForTimeout(400);
-  expect((await stats(request)).connections.at(-1).frames).toBeLessThanOrEqual(
-    frames + 1,
-  );
+  expect(
+    (await stats(page.request)).connections.at(-1).frames,
+  ).toBeLessThanOrEqual(frames + 1);
   expect(await page.evaluate(() => window.voiceTest.tracks[0].enabled)).toBe(
     false,
   );
   await page.getByRole("button", { name: "取消靜音" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await expect
-    .poll(async () => (await stats(request)).connections.at(-1).frames)
+    .poll(async () => (await stats(page.request)).connections.at(-1).frames)
     .toBeGreaterThan(frames + 1);
   await page.getByRole("button", { name: "掛斷本通" }).click();
   await released(page);
@@ -156,17 +156,16 @@ test("voice-only calls save speech automatically and keep text controls absent",
 });
 test("Judge stops voice playback and report opens the exact voice evidence", async ({
   page,
-  request,
 }) => {
   await start(page);
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
-  expect((await stats(request)).connections.at(-1).greetings).toBe(1);
-  await control(request, { action: "play" });
+  expect((await stats(page.request)).connections.at(-1).greetings).toBe(1);
+  await control(page.request, { action: "play" });
   await expect
     .poll(() => page.evaluate(() => window.voiceTest.outputs))
     .toBeGreaterThan(2);
-  await control(request, {
+  await control(page.request, {
     action: "say",
     text: "你是詐騙，我會透過官方管道查證。",
   });
@@ -180,10 +179,9 @@ test("Judge stops voice playback and report opens the exact voice evidence", asy
 });
 test("permission denial creates no provider; retry succeeds; reload releases voice without reacquiring", async ({
   page,
-  request,
 }) => {
   await start(page);
-  const before = (await stats(request)).attempts;
+  const before = (await stats(page.request)).attempts;
   await page.evaluate(() => {
     window.savedAcquire = navigator.mediaDevices.getUserMedia;
     navigator.mediaDevices.getUserMedia = async () => {
@@ -192,7 +190,7 @@ test("permission denial creates no provider; retry succeeds; reload releases voi
   });
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByRole("alert")).toContainText("請允許權限");
-  expect((await stats(request)).attempts).toBe(before);
+  expect((await stats(page.request)).attempts).toBe(before);
   await page.evaluate(() => {
     navigator.mediaDevices.getUserMedia = window.savedAcquire;
   });
@@ -202,50 +200,51 @@ test("permission denial creates no provider; retry succeeds; reload releases voi
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "開啟語音" })).toBeEnabled();
   expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(0);
-  expect((await stats(request)).attempts).toBe(before + 1);
-  expect((await stats(request)).connections.at(-1).disconnected).toBe(true);
+  expect((await stats(page.request)).attempts).toBe(before + 1);
+  expect((await stats(page.request)).connections.at(-1).disconnected).toBe(
+    true,
+  );
 });
 test("provider loss offers voice retry; a fresh attempt can end through Persona delegation", async ({
   page,
-  request,
 }) => {
   await start(page);
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
-  await control(request, { action: "disconnect" });
+  await control(page.request, { action: "disconnect" });
   await expect(page.getByRole("alert")).toContainText("語音連線無法使用");
   await released(page);
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await page.getByRole("button", { name: "重新開啟語音" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
-  await control(request, { action: "say", text: "請稍後聯繫。" });
-  await control(request, { action: "delegate" });
+  await control(page.request, { action: "say", text: "請稍後聯繫。" });
+  await control(page.request, { action: "delegate" });
   await expect(page.locator(".call-end")).toHaveText("對方已結束通話");
   await released(page);
 });
 test("duration limit stops voice and navigation releases the next call's microphone", async ({
   page,
-  request,
 }) => {
   await start(page);
   const id = new URL(page.url()).hash.slice(1);
-  await control(request, { action: "duration", id, seconds: 0.6 });
+  await control(page.request, { action: "duration", id, seconds: 0.6 });
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.locator(".call-end")).toHaveText("已達本通語音時間上限");
   await released(page);
-  await control(request, { action: "duration", id, seconds: 180 });
+  await control(page.request, { action: "duration", id, seconds: 180 });
   await expect(page.getByRole("button", { name: "用語音接通" })).toBeEnabled();
   await page.getByRole("button", { name: "用語音接通" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await page.getByRole("button", { name: /開始新演練/ }).click();
   await released(page);
   await expect
-    .poll(async () => (await stats(request)).connections.at(-1).disconnected)
+    .poll(
+      async () => (await stats(page.request)).connections.at(-1).disconnected,
+    )
     .toBe(true);
 });
 test("reading earlier captions preserves scrolling and a growing caption keeps its identity", async ({
   page,
-  request,
 }) => {
   await start(page);
   await page.getByRole("button", { name: "用語音接通" }).click();
@@ -254,7 +253,7 @@ test("reading earlier captions preserves scrolling and a growing caption keeps i
     "我想先瞭解情況",
   );
   const first = await page.locator(".voice-message.user").elementHandle();
-  await control(request, {
+  await control(page.request, {
     action: "say",
     text: "\n這是一段較長的練習紀錄。".repeat(55),
   });
@@ -267,7 +266,7 @@ test("reading earlier captions preserves scrolling and a growing caption keeps i
   await expect(
     page.getByRole("button", { name: "回到最新對話 ↓" }),
   ).toHaveCount(1);
-  await control(request, { action: "say", text: "新的結尾" });
+  await control(page.request, { action: "say", text: "新的結尾" });
   await expect(page.locator(".voice-message.user > p")).toContainText(
     "新的結尾",
   );

@@ -4,7 +4,7 @@ Merging a pull request into `main` runs validation, builds and tests one Docker 
 
 This is one shared workspace with one active drill. Everyone granted application access can read its history and edit plots. A release or reboot interrupts an active drill and retains accepted messages; it does not resume model work. The interface discloses GCP storage and sharing. Inference content still goes to the configured external model provider.
 
-The default region is Taiwan, `asia-east1`, zone `asia-east1-b`. Application access uses a Google-authenticated IAP tunnel and a loopback browser URL. This configuration does not provide a public website or per-user accounts.
+The default region is Taiwan, `asia-east1`, zone `asia-east1-b`. Application access uses a Google-authenticated IAP tunnel and a loopback browser URL. IAP controls who may connect; the application assigns each browser an opaque HttpOnly workspace credential and isolates plots, drills, reports, streams, and voice operations by that workspace. This is browser-bound isolation rather than named application accounts: clearing cookies or changing browser profiles creates a new workspace.
 
 ## Prerequisites and resource inventory
 
@@ -172,7 +172,7 @@ sudo /bin/bash /var/lib/rolecast/host.sh rollback
 sudo /bin/bash /var/lib/rolecast/host.sh status
 ```
 
-Schema compatibility is read directly without running migrations or engine recovery. The integrated plot editor, live drill stage and voice evidence use schema **4**. Future migrations must update the storage schema constant; the image helper imports it. An older incompatible image is refused, leaving data and transaction evidence intact. Use a corrected forward release, or deliberately select a matching backup and image for restoration. A reboot during a release returns to the last verified compatible release; an interrupted data restore requires operator review before any application starts.
+Schema compatibility is read directly without running migrations or engine recovery. The integrated plot editor, live drill stage, voice evidence, and private workspaces use schema **5**. Future migrations must update the storage schema constant; the image helper imports it. An older incompatible image is refused, leaving data and transaction evidence intact. Use a corrected forward release, or deliberately select a matching backup and image for restoration. A reboot during a release returns to the last verified compatible release; an interrupted data restore requires operator review before any application starts.
 
 ## Explicit data restore
 
