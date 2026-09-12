@@ -10,8 +10,10 @@
 - [x] 2.2 Make container restart/restore smoke retain a real workspace cookie without a fixture auth bypass; verify the full production image smoke with network-disabled model fixtures and schema-5 data.
 - [x] 2.3 Document public HTTPS provisioning, access choices, first-time IAP setup, costs, browser-bound workspace behavior and restricted-mode rollback; reconcile previous deployment artifacts with optional public access and current workspace isolation, then validate all OpenSpec artifacts.
 
+- [x] 2.4 Allow bounded cold-start overhead in the host test subprocess and surface spawn errors instead of accepting a null exit status; verify all 18 host lifecycle tests pass.
+
 ## 3. Live rollout and acceptance
 
-- [ ] 3.1 Review and apply a plan that adds the restricted gateway without replacing the VM or data disk; verify the deployed gateway reaches the private upstream using operator authentication and record the generated HTTPS URL.
+- [x] 3.1 Review and apply a plan that adds the restricted gateway without replacing the VM or data disk; verify the deployed gateway reaches the private upstream using operator authentication and record the generated HTTPS URL.
 - [ ] 3.2 Merge a passing release through the existing main workflow; verify schema-5 migration, backup and retained records, and establish operator ownership of legacy data before anonymous access.
 - [ ] 3.3 Apply the user's selected gateway access mode and verify the real public HTTPS frontend, API, secure workspace cookies, two-browser isolation, streaming/voice transport and blocked direct VM ports; record policy, commit, URL and evidence, and remove temporary resources.

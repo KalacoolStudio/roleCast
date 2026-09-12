@@ -1,6 +1,6 @@
 # Public HTTPS gateway validation
 
-Prepared on 2026-09-12 in `roleCast-task-2`, branch `gcp-ci-deploy`, based on main `2e6771524d4f0d8d34dccdc070d9af012fd99057`. The other worktree and its processes remain independent. Production access policy is pending the user's choice; initial gateway provisioning uses restricted operator IAM invocation.
+Prepared on 2026-09-12 in `roleCast-task-2`, branch `gcp-ci-deploy`, based on main `2e6771524d4f0d8d34dccdc070d9af012fd99057`. Integrated the subsequent ATM-action main commit `b915e04`; the combined version passed 229 unit tests and 22 browser tests. The other worktree and its processes remain independent. Production access policy is pending the user's choice; initial gateway provisioning uses restricted operator IAM invocation.
 
 ## Local and CI prerequisites
 
@@ -25,4 +25,6 @@ The prior main run [34679466833](https://github.com/KalacoolStudio/roleCast/acti
 
 The initial reviewed plan adds six resources, changes no existing resources and destroys none. It enables Cloud Run and creates the gateway service, its service identity, dedicated `10.90.1.0/26` subnet, TCP-8080-only upstream firewall, and operator-only invocation binding. The VM and retained disk are no-op resources. All runtime model settings and backup permissions remain on the existing identities.
 
-Live endpoint, deployment/migration and selected-policy acceptance will be recorded as tasks 3.1–3.3 complete. Successful local checks do not imply anonymous access or completed Google sign-in setup.
+The restricted gateway is provisioned at `https://rolecast-gateway-pzc7so2xgq-de.a.run.app`. It uses Cloud Run gen2 with the required 512 MiB memory. Anonymous `/api/health` returned 403; approved-operator identity-token requests to `/`, `/api/health` and `/api/runtime` returned 200 with the expected frontend, healthy database and GCP mode. Tokens remained in memory. `GCP_APPLICATION_URL` is configured in GitHub production variables. The original VM, data disk and runtime credentials were not changed by this apply. Application migration and selected-policy acceptance remain pending tasks 3.2–3.3. Successful local checks do not imply anonymous access or completed Google sign-in setup.
+
+The first gateway PR run reached a 5-second host-test subprocess timeout (5032 ms), with no release-controller exit status. The fixture now allows 8 seconds within the existing 10-second test budget and surfaces process errors explicitly. All 18 host lifecycle assertions still pass; failure outcomes are not treated as success.
