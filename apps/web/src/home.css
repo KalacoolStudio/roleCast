@@ -1,0 +1,478 @@
+.cast-mark {
+  display: flex;
+  height: 64px;
+  align-items: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+.cast-mark > span {
+  display: block;
+  width: 22px;
+  background: var(--accent);
+  border-radius: 999px 999px 4px 4px;
+}
+.cast-mark > span:nth-child(1) {
+  height: 34px;
+  opacity: 0.38;
+}
+.cast-mark > span:nth-child(2) {
+  height: 52px;
+  opacity: 0.7;
+}
+.cast-mark > span:nth-child(3) {
+  height: 64px;
+}
+.cast-mark > span:nth-child(4) {
+  height: 43px;
+  opacity: 0.52;
+}
+.brand .cast-mark {
+  height: 30px;
+  gap: 3px;
+  align-items: flex-end;
+}
+.brand .cast-mark > span {
+  width: 9px;
+  height: 53%;
+}
+.brand .cast-mark > span:nth-child(2) {
+  height: 81%;
+}
+.brand .cast-mark > span:nth-child(3) {
+  height: 100%;
+}
+.brand .cast-mark > span:nth-child(4) {
+  height: 67%;
+}
+.home {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(310px, 1fr);
+  grid-template-areas: "intro intro" "showcase picker" "steps steps";
+  align-items: stretch;
+  gap: 28px 30px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 40px 28px;
+  background:
+    linear-gradient(90deg, #f8f5efeb, #f8f5efd9),
+    url("/assets/scenes/office-background.png") center / cover;
+}
+.rolecast-intro {
+  grid-area: intro;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid #fff8;
+  border-radius: 20px;
+  background: #fffaf4b8;
+  backdrop-filter: blur(9px);
+}
+.rolecast-intro .cast-mark {
+  margin-top: 2px;
+}
+.rolecast-intro h1 {
+  font-size: clamp(50px, 5.2vw, 76px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.07em;
+  margin: -4px 0 12px;
+}
+.rolecast-tagline {
+  font-size: clamp(19px, 2vw, 27px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.5;
+  margin: 0 0 6px;
+}
+.rolecast-description {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+.scenario-showcase {
+  grid-area: showcase;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 26px;
+  overflow: hidden;
+  border: 1px solid #ffffffb8;
+  border-radius: 28px 7px 28px 7px;
+  background: #f8efe5e8;
+  backdrop-filter: blur(10px);
+}
+.scenario-showcase::before {
+  content: "";
+  position: absolute;
+  inset: 65% -20% -20% 30%;
+  background: #e3c8b04d;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.showcase-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  align-items: end;
+}
+.showcase-status {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.showcase-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3d9d71;
+  box-shadow: 0 0 0 4px #3d9d7118;
+}
+.showcase-heading h2 {
+  font-size: 21px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.showcase-category {
+  font-size: 11px;
+  color: var(--muted);
+}
+.scene-frame {
+  position: relative;
+  flex: 0 0 auto;
+  aspect-ratio: 1672 / 941;
+  margin-top: 20px;
+  border-radius: 18px 6px 18px 6px;
+  overflow: hidden;
+  background: #ddc4ae;
+  box-shadow: 0 14px 28px #4b2f1c20;
+}
+.scenario-scene {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+}
+.scene-topics {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+.scene-topics span {
+  padding: 7px 4px;
+  border: 1px solid #dfd1c4;
+  border-radius: 999px;
+  background: #fffaf5;
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+.scene-topics .highlighted {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #fff1e9;
+}
+.showcase-note {
+  position: relative;
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.scenario-picker {
+  grid-area: picker;
+  min-width: 0;
+  position: relative;
+  padding: 30px 26px 24px;
+  border: 1px solid #fff;
+  border-radius: 6px 28px 6px 6px;
+  background: #fffdf9ed;
+  box-shadow: 12px 12px 0 #dfe5e3;
+  backdrop-filter: blur(12px);
+}
+.picker-count {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  color: #e6e9e7;
+  font-size: 52px;
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  line-height: 1;
+}
+.picker-heading {
+  position: relative;
+}
+.picker-heading .eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  margin: 4px 32px 16px 0;
+}
+.picker-heading h2 {
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  line-height: 1.4;
+  margin: 0 0 8px;
+}
+.picker-heading p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.plot-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+  margin: -4px;
+}
+.plot-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f6f5f2;
+  color: var(--text);
+  text-align: left;
+  flex-shrink: 0;
+}
+.plot-card:hover {
+  background: #fff3ea;
+}
+.plot-card.chosen {
+  border-color: var(--accent);
+  background: #fff1e9;
+}
+.plot-card-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.plot-card strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 650;
+}
+.plot-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 3px;
+}
+.radio {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #c9c9c6;
+  border-radius: 50%;
+  background: white;
+}
+.chosen .radio {
+  border: 5px solid var(--accent);
+}
+.scenario-hint {
+  margin: 12px 0 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.setup label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.setup label span {
+  font-size: 10px;
+  color: var(--muted);
+  margin-left: 8px;
+  font-weight: 400;
+}
+.setup textarea {
+  min-height: 70px;
+  font-size: 12px;
+  background: #fffdfa;
+}
+.scenario-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  justify-content: space-between;
+  margin: 16px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.scenario-picker .start-button {
+  width: 100%;
+  min-height: 54px;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 650;
+  gap: 12px;
+}
+.privacy {
+  color: var(--muted);
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.8;
+  margin: 12px 0 0;
+}
+.resume-link {
+  display: block;
+  padding: 10px;
+  margin: 8px auto 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: underline;
+}
+.how {
+  grid-area: steps;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 14px 28px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.how p {
+  margin: 0;
+}
+.how b {
+  margin-right: 8px;
+  font-size: 10px;
+  color: var(--accent);
+}
+.how i {
+  font-style: normal;
+  color: #adaca7;
+}
+@media (max-width: 1200px) {
+  .home {
+    padding: 28px;
+    gap: 24px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(290px, 1fr);
+  }
+  .scenario-showcase,
+  .scenario-picker {
+    padding: 22px;
+  }
+  .showcase-heading {
+    grid-template-columns: 1fr;
+  }
+  .showcase-heading h2 {
+    font-size: 19px;
+  }
+  .rolecast-intro {
+    gap: 20px;
+  }
+  .scene-frame {
+    margin-top: 20px;
+  }
+  .showcase-note {
+    font-size: 10px;
+  }
+}
+@media (max-width: 1100px) {
+  .home {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "intro" "showcase" "picker" "steps";
+  }
+  .scene-frame {
+    aspect-ratio: 16 / 9;
+    margin: 18px 0 0;
+  }
+  .scenario-picker {
+    padding: 28px;
+  }
+  .showcase-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+@media (max-width: 700px) {
+  .home {
+    padding: 20px 18px 28px;
+    gap: 22px;
+  }
+  .rolecast-intro {
+    padding: 20px 16px;
+    gap: 14px;
+  }
+  .rolecast-intro .cast-mark {
+    width: 46px;
+    height: 35px;
+    gap: 3px;
+  }
+  .rolecast-intro .cast-mark > span {
+    width: 9px;
+    height: 53%;
+  }
+  .rolecast-intro .cast-mark > span:nth-child(2) {
+    height: 81%;
+  }
+  .rolecast-intro .cast-mark > span:nth-child(3) {
+    height: 100%;
+  }
+  .rolecast-intro .cast-mark > span:nth-child(4) {
+    height: 67%;
+  }
+  .rolecast-intro h1 {
+    font-size: 48px;
+    margin-bottom: 12px;
+  }
+  .rolecast-tagline {
+    font-size: 18px;
+    line-height: 1.6;
+  }
+  .rolecast-description {
+    font-size: 11px;
+    line-height: 1.9;
+  }
+  .scenario-showcase {
+    padding: 20px 16px;
+  }
+  .scene-frame {
+    aspect-ratio: 4 / 3;
+  }
+  .showcase-heading {
+    grid-template-columns: 1fr;
+  }
+  .scene-topics {
+    gap: 6px;
+  }
+  .scene-topics span {
+    font-size: 10px;
+  }
+  .scenario-picker {
+    padding: 28px 22px 22px;
+    margin-right: 7px;
+    box-shadow: 7px 7px 0 #dfe5e3;
+  }
+  .how {
+    gap: 10px;
+    font-size: 10px;
+  }
+  .how b {
+    margin-right: 4px;
+  }
+}
