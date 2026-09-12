@@ -56,6 +56,31 @@ function completion(res, text, finishReason = "stop") {
   );
 }
 const reply = { text: "測試回覆", requestHangup: false };
+it("gives Mastermind enough budget and requires a self-contained assignment", async () => {
+  const plan = {
+    action: "create",
+    persona: {
+      id: "persona-1",
+      name: "王專員",
+      role: "客服",
+      personality: "冷靜且有禮",
+    },
+    goal: "完整執行確認、回應與結束通話流程。",
+    sharedMessageIds: [],
+  };
+  const { config, requests } = await provider((_req, res) =>
+    completion(res, JSON.stringify(plan)),
+  );
+
+  expect(
+    await new Agents(config).run("plan", { personas: [], messages: [] }),
+  ).toEqual(plan);
+  expect(requests[0].body.max_tokens).toBe(8000);
+  expect(requests[0].body.messages[0].content).toContain(
+    "獨立可執行的完整 assignment",
+  );
+  expect(requests[0].body.messages[0].content).toContain("不得用「依規定」");
+});
 it("validates voice assistance through main's strict output contract, including empty context", async () => {
   const result = { context: "", requestHangup: false };
   const { config, requests } = await provider((_req, res) =>

@@ -4,6 +4,7 @@ import {
   conversationClosure,
   VoiceCoordinator,
 } from "../apps/server/src/voice.js";
+import { liveSessionOptions } from "../packages/core/src/voice-context.js";
 import { harness, ready, until, deferred } from "./support/fixtures.js";
 import { fakeLive, fakeSocket, transcript } from "./support/voice.js";
 const cleanup = [];
@@ -16,6 +17,47 @@ const keep = {
   reason: "需更多資料",
   evidenceIds: [],
 };
+it("passes the complete assignment to Live and forbids repeated confirmation", () => {
+  const goal =
+    "確認對方收到提醒；若回答可以，就致謝並說再見；等待對方告別後結束通話。";
+  const options = liveSessionOptions(
+    {
+      plot: {},
+      personas: [
+        {
+          id: "persona-1",
+          name: "王專員",
+          role: "客服",
+          personality: "冷靜且有禮",
+        },
+      ],
+      assignments: [
+        {
+          id: "assignment-1",
+          goal,
+          sharedMessageIds: [],
+        },
+      ],
+      calls: [
+        {
+          id: "call-1",
+          assignmentId: "assignment-1",
+          personaId: "persona-1",
+        },
+      ],
+      messages: [],
+    },
+    {
+      id: "call-1",
+      assignmentId: "assignment-1",
+      personaId: "persona-1",
+    },
+  );
+
+  expect(options.instructions).toContain(goal);
+  expect(options.instructions).toContain("不得再問相同問題");
+  expect(options.instructions).toContain("等待時不得重複收尾");
+});
 it("recognizes an explicit farewell without treating a bare acknowledgement as closure", () => {
   const persona = {
     id: "persona-close",
