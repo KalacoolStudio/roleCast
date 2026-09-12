@@ -1,5 +1,7 @@
 # Validation — 2026-09-12
 
+The original implementation evidence below predates main's dedicated reports and incoming-call popup. The final section records validation of the reconciled merge; the revised proposal, design, and delta describe that current behavior.
+
 Implemented the shared left navigation collapse/expand control in `apps/web/src/main.jsx` and `apps/web/src/style.css`. Desktop collapses to a 64px rail; mobile keeps the brand and toggle in a compact header. The sidebar starts expanded after a page load and retains its state during in-page navigation and viewport changes.
 
 ## Automated checks
@@ -39,3 +41,24 @@ Screenshots from the final browser run:
 Browser checks use Chromium, the existing fixture agents/provider, and fake microphone media. They do not claim real-device microphone, paid-provider, or manual screen-reader validation. No backend behavior or dependencies changed; backend unit suites were not rerun for this frontend change.
 
 All six implementation tasks are complete. The change remains active for review and later specification synchronization/archive.
+
+## Main integration — 2026-09-12
+
+Merged `origin/main` at `7e2c4ac` into `side_drawer` from `1226f03`. The conflict in `apps/web/src/main.jsx` involved sidebar state and navigation markup. Resolution retains main's report routes, report count, automatic terminal-drill report navigation, incoming-call popup, ring-tone lifecycle, and removal of the home background input, while adding the existing collapse state/header/body around the current navigation.
+
+Reconciled the sidebar proposal, design, requirements, and integration tasks. Old sidebar-history and home-background checks are historical evidence; current tests check the dedicated report page and editor drafts. The report list/detail remains visible in the main workspace while the navigation is collapsed. Popup background inertness still prevents focusing the sidebar while the incoming dialog is open, and dismissal/reopening/answering preserves the collapse state and pending assignment.
+
+The responsive check exposed horizontal report overflow with expanded navigation at 701px. The report index/detail and feedback cards now stack at widths up to 1100px, retaining the two-column desktop presentation above that breakpoint.
+
+Validation of the merged code:
+
+- `npm run build` — passed.
+- `npm run check` — passed.
+- `npx vitest run tests/stage.test.js` — 11 passed. The event-stream test requires a local server, so it was rerun outside the sandbox after the initial loopback bind was denied.
+- `ROLECAST_TEST_PORT=3192 npx playwright test tests/browser/app.spec.js tests/browser/voice.spec.js tests/browser/marketplace.spec.js tests/browser/stage.spec.js tests/browser/workspace.spec.js` — 32 passed in 1.3 minutes, using fixture agents and synthetic microphone media.
+- `openspec validate --all --strict` — 18 passed, 0 failed.
+- `git diff --check` — passed.
+
+Reviewed expanded/collapsed desktop and mobile report screenshots from the combined run. The desktop screenshot paths above remain current; mobile screenshots are now under `test-results/app-sidebar-mobile-reports-b1157-survive-collapse-and-resize/`. Both navigation states passed overflow checks at 320, 390, 700, 701, 768, 1000, 1024, and 1440px. Keyboard focus, plot selection, unsaved editor fields, report selection/reload, collapsed navigation across views, popup interaction, live voice, stage, ATM, and browser workspace isolation are covered.
+
+The change remains active with its reconciled delta available for later specification synchronization/archive. No paid-provider or real-device validation is claimed.

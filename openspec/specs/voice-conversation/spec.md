@@ -8,11 +8,15 @@ Let participants conduct Role Cast calls entirely by speaking and hearing the as
 
 ### Requirement: Voice-only activation
 
-The interface SHALL offer only voice activation when accepting or reopening a pending call and SHALL NOT expose a reply composer or typed-message action. Microphone capture SHALL require an explicit user gesture and permission. A call accepted directly in voice mode SHALL request one spoken opening after readiness. Starting voice after a failed attempt SHALL preserve its Persona, transcript, and call ID without replaying the opening.
+The interface SHALL offer only voice activation when accepting or reopening a pending call and SHALL NOT expose a reply composer or typed-message action. A pending call SHALL play a bounded repeating incoming-call tone without creating a microphone or provider session. The tone SHALL stop when answering begins, the pending call changes, the participant leaves the drill, or the interface is disposed. Microphone capture SHALL require an explicit user gesture and permission. A call accepted directly in voice mode SHALL request one spoken opening after readiness. Starting voice after a failed attempt SHALL preserve its Persona, transcript, and call ID without replaying the opening.
 
 #### Scenario: Accept directly in voice mode
 - **WHEN** a pending call is accepted using its voice option
 - **THEN** the assigned Persona gives one spoken opening after initialization, without generating a separate text-mode opening
+
+#### Scenario: Incoming call rings
+- **WHEN** a voice-capable drill exposes a pending call
+- **THEN** the interface plays one repeating incoming-call tone until answering begins or that pending call is no longer current
 
 #### Scenario: Microphone unavailable
 - **WHEN** permission is denied, no microphone exists, or the browser lacks supported audio capabilities

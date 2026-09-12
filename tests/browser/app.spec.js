@@ -1,14 +1,16 @@
-import { startDrill } from "../support/browser.js";
+import { startDrill, finishDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 async function currentDrill(page) {
-  const id = new URL(page.url()).hash.slice(1);
+  const id = decodeURIComponent(
+    new URL(page.url()).hash.slice(1).replace(/^reports\//, ""),
+  );
   return (await page.request.get(`/api/drills/${id}`)).json();
 }
 
 async function acceptThroughApi(page) {
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   const drill = await currentDrill(page);
   const response = await page.request.post(
     `/api/drills/${drill.id}/calls/accept`,
@@ -28,7 +30,7 @@ async function sendThroughApi(page, text) {
   expect(response.ok()).toBe(true);
   await expect.poll(async () => (await currentDrill(page)).busy).toBe(false);
 }
-test("desktop and mobile layout; failed and interrupted histories remain readable", async ({
+test("desktop and mobile layout; historical reports preserve failed and interrupted records", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1080 });
@@ -40,15 +42,23 @@ test("desktop and mobile layout; failed and interrupted histories remain readabl
     path: testInfo.outputPath("desktop.png"),
     fullPage: true,
   });
-  await page.locator(".history-item").filter({ hasText: "演練未完成" }).click();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await expect(page.getByRole("heading", { name: "歷史報告" })).toBeVisible();
+  await page
+    .locator(".report-index button")
+    .filter({ hasText: "演練未完成" })
+    .click();
   await expect(page.getByRole("alert")).toContainText("模型 API 驗證失敗");
-  await page.locator(".history-item").filter({ hasText: "演練已中斷" }).click();
+  await page
+    .locator(".report-index button")
+    .filter({ hasText: "演練已中斷" })
+    .click();
   await expect(page.getByRole("alert")).toContainText("服務已重新啟動");
   await page.getByRole("button", { name: /開始新演練/ }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "演練紀錄 ＋" }).click();
-  await expect(page.locator(".history-item").first()).toBeVisible();
-  await page.getByRole("button", { name: "演練紀錄 −" }).click();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await expect(page.locator(".report-index button").first()).toBeVisible();
+  await page.getByRole("button", { name: /開始新演練/ }).click();
   await expect(page.getByRole("button", { name: /開始演練/ })).toBeVisible();
   expect(
     await page.evaluate(
@@ -66,8 +76,7 @@ async function finishSidebarDrill(page) {
     .filter({ hasText: "後端工程師面試" })
     .click();
   await startDrill(page);
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
 }
 
@@ -81,7 +90,10 @@ test("sidebar toggle preserves keyboard focus, navigation, and desktop space", a
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await expect(toggle).toHaveAttribute("aria-controls", "sidebar-content");
   await finishSidebarDrill(page);
-  const selected = await page.locator(".history-item.current").textContent();
+  const selectedReport = page.locator(
+    '.report-index button[aria-current="page"]',
+  );
+  const selected = await selectedReport.textContent();
   const url = page.url();
   const expandedMain = await page.locator("main").boundingBox();
   await page.screenshot({
@@ -94,6 +106,8 @@ test("sidebar toggle preserves keyboard focus, navigation, and desktop space", a
   await expect(expand).toBeFocused();
   await expect(expand).toHaveAttribute("aria-expanded", "false");
   await expect(content).toBeHidden();
+  await expect(page.locator(".report")).toBeVisible();
+  await expect(selectedReport).toHaveText(selected);
   await expect(page.getByRole("button", { name: /開始新演練/ })).toHaveCount(0);
   expect(
     await expand.evaluate((button) => getComputedStyle(button).outlineStyle),
@@ -115,27 +129,17 @@ test("sidebar toggle preserves keyboard focus, navigation, and desktop space", a
   await page.keyboard.press("Space");
   await expect(toggle).toBeFocused();
   await expect(content).toBeVisible();
-  await expect(page.locator(".history-item.current")).toHaveText(selected);
+  await expect(selectedReport).toHaveText(selected);
+  await expect(page.locator(".nav-item.selected")).toContainText("歷史報告");
   expect(page.url()).toBe(url);
 
   await page.setViewportSize({ width: 1440, height: 450 });
-  const history = page.locator(".history");
-  expect(
-    await history.evaluate(
-      (element) => element.scrollHeight > element.clientHeight,
-    ),
-  ).toBe(true);
-  await history.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  expect(
-    await history.evaluate((element) => element.scrollTop),
-  ).toBeGreaterThan(0);
+  await expect(page.getByRole("button", { name: /歷史報告/ })).toBeInViewport();
   await expect(page.locator(".sidebar-foot")).toBeInViewport();
   await toggle.click();
   await page.reload();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator(".history-item.current")).toHaveText(selected);
+  await expect(selectedReport).toHaveText(selected);
 });
 
 test("sidebar toggling preserves drafts and stays collapsed during in-page navigation", async ({
@@ -148,13 +152,10 @@ test("sidebar toggling preserves drafts and stays collapsed during in-page navig
     .locator(".plot-card")
     .filter({ hasText: "後端工程師面試" });
   await interview.click();
-  await page.getByLabel("讓練習更貼近你").fill("保留這段尚未送出的背景。");
+  await expect(page.getByLabel("讓練習更貼近你")).toHaveCount(0);
   await collapse.click();
   await expand.click();
   await expect(interview).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByLabel("讓練習更貼近你")).toHaveValue(
-    "保留這段尚未送出的背景。",
-  );
 
   await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
   await page.getByRole("button", { name: "＋ 新增劇本" }).click();
@@ -177,10 +178,10 @@ test("sidebar toggling preserves drafts and stays collapsed during in-page navig
   await expect(page.locator(".marketplace-intro")).toBeVisible();
   await expect(expand).toHaveAttribute("aria-expanded", "false");
   await expand.click();
-  await expect(page.locator(".nav-item.selected")).toContainText("開始新演練");
+  await expect(page.locator(".nav-item.selected")).toHaveCount(0);
 });
 
-test("sidebar mobile history and responsive layouts survive collapse and resize", async ({
+test("sidebar mobile reports and responsive layouts survive collapse and resize", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -190,15 +191,22 @@ test("sidebar mobile history and responsive layouts survive collapse and resize"
   await page.getByRole("button", { name: /開始新演練/ }).click();
   const collapse = page.getByRole("button", { name: "收合側邊欄" });
   const expand = page.getByRole("button", { name: "展開側邊欄" });
-  await page.getByRole("button", { name: "演練紀錄 ＋" }).click();
-  await expect(page.locator(".history-item").first()).toBeVisible();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await page
+    .locator(".report-index button")
+    .filter({ hasText: "演練完成" })
+    .click();
+  await expect(page.locator(".report")).toBeVisible();
+  const reportUrl = page.url();
   const expandedHeight = (await page.locator(".sidebar").boundingBox()).height;
   await page.screenshot({
     path: testInfo.outputPath("sidebar-mobile-expanded.png"),
   });
   await collapse.click();
   await expect(page.locator(".brand")).toBeVisible();
-  await expect(page.locator(".history-item").first()).toBeHidden();
+  await expect(page.getByRole("button", { name: /歷史報告/ })).toHaveCount(0);
+  await expect(page.locator(".report-index button").first()).toBeVisible();
+  await expect(page.locator(".report")).toBeVisible();
   expect((await page.locator(".sidebar").boundingBox()).height).toBeLessThan(
     expandedHeight,
   );
@@ -233,20 +241,24 @@ test("sidebar mobile history and responsive layouts survive collapse and resize"
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expand.click();
-  await expect(
-    page.getByRole("button", { name: "演練紀錄 −" }),
-  ).toHaveAttribute("aria-expanded", "true");
-  await page.locator(".history-item").filter({ hasText: "演練完成" }).click();
+  await expect(page.locator(".nav-item.selected")).toContainText("歷史報告");
+  expect(page.url()).toBe(reportUrl);
   await expect(page.locator(".report")).toBeVisible();
+  await collapse.click();
+  await page.getByRole("button", { name: /開始下一次練習/ }).click();
   await expect(
-    page.getByRole("button", { name: "演練紀錄 ＋" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator(".history-item").first()).toBeHidden();
+    page.getByRole("heading", { name: "選擇今天的練習" }),
+  ).toBeVisible();
+  await expect(expand).toHaveAttribute("aria-expanded", "false");
+  await expand.click();
+  await expect(page.locator(".nav-item.selected")).toContainText("開始新演練");
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await expect(page.locator(".report-index button").first()).toBeVisible();
 });
 
 test("scenario selection, keyboard interaction, refresh, StopCall and report evidence", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "選擇今天的練習" }),
@@ -259,7 +271,7 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
       "紀錄保存在本機。演練內容會送至你設定的外部 LLM API 進行推論。",
     ),
   ).toBeVisible();
-  await page.getByLabel("讓練習更貼近你").fill("我想練習查證。");
+  await expect(page.getByLabel("選填背景")).toHaveCount(0);
   await startDrill(page);
   await acceptThroughApi(page);
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
@@ -269,11 +281,20 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".message.user")).toHaveCount(1);
   await sendThroughApi(page, "你是詐騙，我要透過官方管道查證");
+  await expect(page).toHaveURL(/#reports\//);
   await expect(
     page.getByRole("heading", { name: "這次練習，你帶走了什麼？" }),
   ).toBeVisible();
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".evidence a").first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "演練時間軸" })).toBeVisible();
+  await expect(page.getByLabel("時間軸位置")).toHaveAttribute("max", /[1-9]/);
+  await page.getByRole("button", { name: "下一格" }).click();
+  await expect(page.locator(".timeline-controls > span")).toContainText("2 /");
+  await page.screenshot({
+    path: testInfo.outputPath("report-with-timeline.png"),
+    fullPage: true,
+  });
   await page.locator(".evidence a").first().click();
   await page.reload();
   await expect(
@@ -303,7 +324,8 @@ test("interview recalls a persona and changes role on a later call; finishes wit
   await expect(page.locator(".call-heading h2").nth(1)).toContainText("林小姐");
   await expect(page.locator(".call-heading h2").nth(2)).toContainText("陳主管");
   await page.getByRole("button", { name: /開始下一次練習/ }).click();
-  await page.locator(".history-item").first().click();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await page.locator(".report-index button").first().click();
   await expect(page.locator(".report")).toBeVisible();
 });
 test("early finish reports insufficient evidence and network recovery works", async ({
@@ -311,14 +333,14 @@ test("early finish reports insufficient evidence and network recovery works", as
 }) => {
   await page.goto("/");
   await startDrill(page);
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   await page.route("**/api/drills/*", (route) => route.abort());
   await page.reload();
   await expect(page.getByRole("alert")).toBeVisible();
   await page.unroute("**/api/drills/*");
   await page.getByRole("button", { name: "重新取得狀態" }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(
     page.getByText("目前證據不足，部分面向尚無法評估。"),
   ).toBeVisible();
@@ -384,7 +406,7 @@ test("plot editor copies, edits three prompts, exports/imports and launches an i
     page.getByRole("heading", { name: "匯入客服演練" }),
   ).toBeVisible();
   await expect(page.getByText(/Plot v1/)).toBeVisible();
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
   await page.reload();
   await expect(

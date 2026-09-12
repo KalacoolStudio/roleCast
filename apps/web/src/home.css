@@ -293,23 +293,6 @@
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
-.setup label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.setup label span {
-  font-size: 10px;
-  color: var(--muted);
-  margin-left: 8px;
-  font-weight: 400;
-}
-.setup textarea {
-  min-height: 70px;
-  font-size: 12px;
-  background: #fffdfa;
-}
 .scenario-meta {
   display: flex;
   flex-wrap: wrap;

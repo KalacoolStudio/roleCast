@@ -7,7 +7,7 @@
 ## Requirements
 
 ### Requirement: Participant oriented interface
-介面 SHALL 提供情境選擇、選填背景、演練狀態、當前角色、依序排列的語音逐字稿及靜音、掛斷與結束控制。介面 SHALL NOT 提供文字回覆欄位或送出文字操作。通話中 SHALL 只將 Persona 呈現為對話角色；Mastermind 指令、Allowed Facts 內部清單、Judge 私有觀察及 API 設定不得作為聊天內容送至受測者。介面 SHALL 使用繁體中文。
+介面 SHALL 提供情境選擇、演練狀態、當前角色、依序排列的語音逐字稿及靜音、掛斷與結束控制。介面 SHALL NOT 提供文字回覆欄位或送出文字操作。通話中 SHALL 只將 Persona 呈現為對話角色；Mastermind 指令、Allowed Facts 內部清單、Judge 私有觀察及 API 設定不得作為聊天內容送至受測者。介面 SHALL 使用繁體中文。
 
 #### Scenario: Start and accept call
 - **WHEN** 使用者開始演練，Mastermind 完成第一通指派
@@ -36,11 +36,15 @@
 - **THEN** 頁面重新顯示同一場、同一通與已保存逐字稿，不自行開啟麥克風、另開一場或重播開場
 
 ### Requirement: Historical transcripts and reports
-使用者 SHALL 能列出過往演練，查看情境、時間、終止狀態、按通話分組的逐字稿及已產出的報告。失敗或被程序重啟中斷的演練 SHALL 可查看既有紀錄並明確區分於正常完成。
+navbar SHALL 提供獨立的歷史報告頁。使用者 SHALL 能在該頁列出過往演練，選擇一筆後查看情境、時間、終止狀態、按通話分組的逐字稿及已產出的報告。報告 SHALL 以分段卡片呈現摘要、能力面向、優點與改進建議，並提供依實際時間排列、可逐格選取及播放的公開演練時間軸；時間軸 SHALL 可切換是否顯示逐字稿，且不得洩漏模型私有推理。失敗或被程序重啟中斷的演練 SHALL 可查看既有紀錄並明確區分於正常完成。drill 進入 completed、failed 或 interrupted 後，介面 SHALL 自動導向該筆歷史報告詳情。
 
 #### Scenario: View an earlier report
 - **WHEN** 使用者開啟已完成演練
-- **THEN** 顯示保存的逐字稿與報告，不重新呼叫 LLM 生成內容
+- **THEN** 顯示保存的逐字稿、分段報告與公開演練時間軸，不重新呼叫 LLM 生成內容
+
+#### Scenario: Drill finishes
+- **WHEN** 進行中的 drill 完成、失敗或中斷
+- **THEN** 介面自動開啟歷史報告頁並選取該筆演練；使用者可從列表切換到其他紀錄
 
 ### Requirement: Consistent prototype visual identity
 
@@ -52,7 +56,7 @@
 
 ### Requirement: Illustrated plot selection
 
-首頁 SHALL 顯示品牌介紹、情境插圖、劇本選擇、選填背景及開始演練控制。選擇劇本 SHALL 更新預覽名稱、分類、簡介、插圖與練習重點；內建防詐及面試劇本 SHALL 各有對應插圖，其他劇本 SHALL 使用通用辦公室插圖及通用練習重點。插圖 SHALL 隨專案提供，不依賴原型來源目錄或外部圖片服務。預覽 SHALL 僅呈現練習主題，不作為實際角色指派、接通或進度的依據。
+首頁 SHALL 顯示品牌介紹、情境插圖、劇本選擇及開始演練控制。選擇劇本 SHALL 更新預覽名稱、分類、簡介、插圖與練習重點；內建防詐及面試劇本 SHALL 各有對應插圖，其他劇本 SHALL 使用通用辦公室插圖及通用練習重點。插圖 SHALL 隨專案提供，不依賴原型來源目錄或外部圖片服務。預覽 SHALL 僅呈現練習主題，不作為實際角色指派、接通或進度的依據。
 
 #### Scenario: Select a built-in plot
 - **WHEN** 使用者在防詐與面試劇本之間切換
@@ -68,11 +72,11 @@
 
 ### Requirement: Responsive and accessible scenario home
 
-首頁 SHALL 在寬螢幕並排呈現情境預覽與劇本選擇，在窄螢幕上下排列。介面 SHALL 在 320px 至 1440px 的檢查寬度保持無水平溢出，並保留可操作的劇本、背景、開始及歷史紀錄控制。劇本選擇 SHALL 可使用鍵盤操作並暴露選取狀態；輸入 SHALL 有文字標籤，插圖 SHALL 有替代文字，裝飾性標誌 SHALL 不重複朗讀品牌名稱。
+首頁 SHALL 在寬螢幕並排呈現情境預覽與劇本選擇，在窄螢幕上下排列。介面 SHALL 在 320px 至 1440px 的檢查寬度保持無水平溢出，並保留可操作的劇本、開始及歷史報告控制。劇本選擇 SHALL 可使用鍵盤操作並暴露選取狀態；輸入 SHALL 有文字標籤，插圖 SHALL 有替代文字，裝飾性標誌 SHALL 不重複朗讀品牌名稱。
 
 #### Scenario: Narrow-screen home and history
-- **WHEN** 使用者於 390px 寬手機開啟首頁並展開或收合演練紀錄
-- **THEN** 預覽與選擇區上下排列，歷史紀錄可讀取，開始演練控制可操作，頁面不產生水平溢出
+- **WHEN** 使用者於 390px 寬手機開啟首頁或歷史報告頁
+- **THEN** 預覽與選擇區上下排列，歷史報告列表與所選內容可讀取，開始演練控制可操作，頁面不產生水平溢出
 
 #### Scenario: Keyboard scenario selection
 - **WHEN** 使用者以鍵盤聚焦並啟用劇本選擇或開始控制

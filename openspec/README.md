@@ -38,4 +38,6 @@ Other active changes retained from main:
 
 - [add-gcp-ci-deploy](changes/add-gcp-ci-deploy/) — deployment implementation and recorded cloud acceptance. Its local-runtime disclosure is synchronized; the three new cloud capability deltas remain under the active change as received from main. Workspace-related wording has been reconciled with current main; original live validation remains historical evidence.
 
+The [align-incoming-caller-ui](changes/align-incoming-caller-ui/) change adds the prototype's dark incoming-call popup and answer/decline actions, preserving the workspace layout. Its delta specs remain under the active change for review and later synchronization; see its validation record for browser and visual checks.
+
 Run `openspec validate --all --strict` to validate current specs and active changes, or `openspec list` to inspect pending work. See [main integration validation](changes/add-anti-fraud-chat-intro/validation.md) for this branch's combined merge checks.
