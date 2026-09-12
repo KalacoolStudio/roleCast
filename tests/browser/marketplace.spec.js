@@ -1,3 +1,4 @@
+import { finishDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
@@ -134,7 +135,7 @@ test("mobile reduced-motion chat hands off once, retains background, and exclude
   await expect(page.locator(".marketplace-intro")).toBeVisible();
   await page.unroute("**/api/drills");
   await page.getByRole("button", { name: "申請客服回電" }).click();
-  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /接聽/ })).toBeVisible();
   expect(creates).toEqual([
     { plotId: "anti-fraud", background },
     { plotId: "anti-fraud", background },
@@ -144,7 +145,7 @@ test("mobile reduced-motion chat hands off once, retains background, and exclude
   expect(drill.calls).toEqual([]);
   expect(JSON.stringify(drill)).not.toContain(opening);
   expect(JSON.stringify(drill)).not.toContain(sellerReply);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toContainText("目前證據不足");
   await expect(page.locator(".report")).not.toContainText(sellerReply);
   await page.reload();
@@ -178,6 +179,6 @@ test("a callback conflict resumes the existing drill and leaving the intro cance
     page.getByRole("heading", { name: "後端工程師面試" }),
   ).toBeVisible();
   expect(await page.evaluate(() => location.hash.slice(1))).toBe(id);
-  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await finishDrill(page);
   await expect(page.locator(".report")).toBeVisible();
 });

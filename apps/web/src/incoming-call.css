@@ -1,0 +1,169 @@
+.incoming-call {
+  position: fixed;
+  inset: 0;
+  width: min(420px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #ffffff1a;
+  border-radius: 28px;
+  background: #182b32;
+  color: #f6f7f9;
+  box-shadow: 0 24px 80px #09151c66;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.incoming-call::backdrop {
+  background: #101e2abd;
+  backdrop-filter: blur(4px);
+}
+.incoming-call-content {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  padding: 30px 32px 26px;
+}
+.incoming-call-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #bac8cf;
+  font-size: 26px;
+  line-height: 1;
+}
+.incoming-call-close:hover:not(:disabled) {
+  background: #ffffff12;
+}
+.incoming-call-eyebrow {
+  margin: 0 0 28px;
+  color: #bac8cf;
+  font-size: 12px;
+  letter-spacing: 3px;
+}
+.incoming-call-badge {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 28px;
+  border-radius: 50%;
+  background: #326b8c;
+  box-shadow: 0 0 0 7px #ffffff12;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.incoming-call-badge.interview {
+  background: #667544;
+}
+.incoming-call-badge.marketplace {
+  background: #d94825;
+}
+.incoming-call h2 {
+  max-width: 100%;
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.4;
+  outline: none;
+}
+.incoming-call-role {
+  max-width: 100%;
+  margin: 6px 0 0;
+  color: #bac8cf;
+  font-size: 13px;
+}
+.incoming-call-status {
+  max-width: 100%;
+  margin: 28px 0 0;
+  color: #bac8cf;
+  font-size: 16px;
+}
+.incoming-call-error {
+  max-width: 100%;
+  margin: 16px 0 0;
+  padding: 10px 14px;
+  border: 1px solid #e59b8e66;
+  border-radius: 10px;
+  background: #512e2e;
+  color: #ffe2db;
+  font-size: 13px;
+}
+.incoming-call-actions {
+  display: flex;
+  gap: 24px;
+  margin-top: 32px;
+}
+.incoming-call-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 120px;
+  min-height: 52px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 28px;
+  color: #fff;
+  font-size: 16px;
+}
+.incoming-call-decline {
+  background: #b64142;
+}
+.incoming-call-decline svg {
+  transform: rotate(135deg);
+}
+.incoming-call-answer {
+  background: #26794f;
+}
+.incoming-call-decline:hover:not(:disabled) {
+  background: #a43536;
+}
+.incoming-call-answer:hover:not(:disabled) {
+  background: #1e6842;
+}
+.incoming-call button:focus-visible {
+  outline: 3px solid #f6f7f9;
+  outline-offset: 4px;
+}
+.incoming-call-help {
+  margin: 12px 0 0;
+  color: #bac8cf;
+  font-size: 12px;
+}
+.incoming-call-disclosure {
+  max-width: 100%;
+  margin-top: 22px;
+  color: #bac8cf;
+  line-height: 1.7;
+}
+.incoming-call-disclosure small {
+  font-size: 11px;
+}
+.incoming-call-trigger {
+  border: 1px solid #26794f44;
+  background: #e8f2eb;
+  color: #22653e;
+  min-height: 44px;
+}
+@media (max-width: 480px) {
+  .incoming-call-content {
+    padding: 26px 24px 24px;
+  }
+  .incoming-call-actions {
+    gap: 16px;
+  }
+  .incoming-call-actions button {
+    min-width: 100px;
+    padding-inline: 14px;
+  }
+}

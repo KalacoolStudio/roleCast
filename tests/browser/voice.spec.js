@@ -73,7 +73,7 @@ async function currentDrill(page) {
 async function start(page) {
   await page.goto("/");
   await startDrill(page);
-  await expect(page.getByRole("button", { name: "用語音接通" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "接聽" })).toBeEnabled();
 }
 async function released(page) {
   await expect
@@ -105,6 +105,244 @@ test("voice-only home blocks drills when voice is unavailable", async ({
   await expect(page.getByText("即時語音互動").first()).toBeVisible();
   await expect(page.getByText("文字 / 語音互動")).toHaveCount(0);
 });
+test("incoming interview matches the reference and keyboard decline never opens voice", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await page
+    .locator(".plot-card")
+    .filter({ hasText: "後端工程師面試" })
+    .click();
+  await startDrill(page);
+  const screen = page.getByRole("dialog", { name: "林小姐", exact: true });
+  await expect(screen).toBeVisible();
+  const pending = (await currentDrill(page)).pendingCall;
+  await expect(screen.getByRole("heading")).toHaveText(pending.persona.name);
+  await expect(screen.locator(".incoming-call-role")).toHaveText(
+    pending.persona.role,
+  );
+  await expect(screen.locator(".incoming-call-badge")).toHaveText("HR");
+  await expect(screen.getByRole("status")).toHaveText("來電中…");
+  await expect(screen).toContainText("本機僅保存逐字稿");
+  await expect(page.locator(".voice-panel")).toHaveCount(0);
+  const screenBox = await screen.boundingBox();
+  const workspace = await page.locator(".drill-workspace").boundingBox();
+  const stage = await page.locator(".stage-panel").boundingBox();
+  expect(screenBox.width).toBeLessThan(workspace.width);
+  expect(screenBox.x + screenBox.width / 2).toBeCloseTo(720, 0);
+  expect(stage.y).toBe(workspace.y);
+  const layout = () =>
+    page.evaluate(() => ({
+      stage: document
+        .querySelector(".stage-panel")
+        .getBoundingClientRect()
+        .toJSON(),
+      chat: document
+        .querySelector(".drill-conversation")
+        .getBoundingClientRect()
+        .toJSON(),
+      height: document.documentElement.scrollHeight,
+    }));
+  const beforeDismiss = await layout();
+  await page.keyboard.press("Escape");
+  await expect(screen).not.toBeVisible();
+  await expect(page.getByRole("button", { name: /查看來電/ })).toBeFocused();
+  expect(await layout()).toEqual(beforeDismiss);
+  expect((await currentDrill(page)).pendingCall).toEqual(pending);
+  await page.keyboard.press("Enter");
+  await expect(screen.getByRole("heading")).toBeFocused();
+  expect(await layout()).toEqual(beforeDismiss);
+  await page.mouse.click(4, 4);
+  await expect(screen).not.toBeVisible();
+  await page.getByRole("button", { name: /查看來電/ }).click();
+  await page.screenshot({
+    path: testInfo.outputPath("incoming-interview-desktop.png"),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(
+    screen.getByRole("button", { name: "接聽", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({
+    path: testInfo.outputPath("incoming-interview-mobile.png"),
+  });
+  await screen.getByRole("button", { name: "拒接", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    screen.getByRole("button", { name: "接聽", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    screen.getByRole("button", { name: "收合來電視窗" }),
+  ).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Shift+Tab");
+  const before = (await stats(page.request)).attempts;
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".report")).toBeVisible();
+  await expect(page.locator(".evidence-note")).toContainText("證據不足");
+  expect((await currentDrill(page)).calls).toHaveLength(0);
+  expect((await stats(page.request)).attempts).toBe(before);
+  expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(0);
+  await expect(screen).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+});
+test("incoming custom identities wrap at narrow widths and unavailable voice still allows decline", async ({
+  page,
+}, testInfo) => {
+  await start(page);
+  const drill = await currentDrill(page);
+  const longName = "Alexandra Montgomery-Wellington".repeat(3);
+  // Keep the custom snapshot authoritative through polling; the fixture's
+  // unmodified SSE snapshots would otherwise replace the injected identity.
+  await page.route(`**/api/drills/${drill.id}/events/stream?*`, (route) =>
+    route.abort(),
+  );
+  await page.route(`**/api/drills/${drill.id}`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.plot.id = "custom-training";
+    if (body.pendingCall) {
+      body.pendingCall.persona.name = longName;
+      body.pendingCall.persona.role =
+        "跨國公司客戶關係與事件協調資深主管".repeat(3);
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  const screen = page.locator(".incoming-call");
+  await expect(screen.getByRole("heading")).toHaveText(longName);
+  await expect(screen.locator(".incoming-call-badge")).toHaveText("AM");
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    const decline = await screen
+      .getByRole("button", { name: "拒接", exact: true })
+      .boundingBox();
+    const answer = await screen
+      .getByRole("button", { name: "接聽", exact: true })
+      .boundingBox();
+    expect(decline.height).toBeGreaterThanOrEqual(44);
+    expect(answer.y).toBe(decline.y);
+    expect(answer.x).toBeGreaterThan(decline.x + decline.width);
+    expect(answer.x + answer.width).toBeLessThanOrEqual(width);
+    const atm = page.getByRole("button", { name: "ATM", exact: true });
+    await atm.evaluate((node) => node.focus());
+    await expect(atm).not.toBeFocused();
+    const bounds = await screen.boundingBox();
+    const caller = await screen.getByRole("heading").boundingBox();
+    expect(caller.x + caller.width).toBeLessThanOrEqual(
+      bounds.x + bounds.width,
+    );
+    expect(answer.x + answer.width).toBeLessThanOrEqual(
+      bounds.x + bounds.width,
+    );
+    expect(
+      await screen.evaluate((node) => node.scrollWidth <= node.clientWidth),
+    ).toBe(true);
+  }
+  await page.setViewportSize({ width: 320, height: 900 });
+  await screen.screenshot({
+    path: testInfo.outputPath("incoming-custom-320.png"),
+  });
+  await page.setViewportSize({ width: 320, height: 480 });
+  expect((await screen.boundingBox()).height).toBeLessThanOrEqual(448);
+  expect(
+    await screen.evaluate((node) => node.scrollWidth <= node.clientWidth),
+  ).toBe(true);
+  await screen
+    .getByRole("button", { name: "拒接", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    screen.getByRole("button", { name: "拒接", exact: true }),
+  ).toBeInViewport();
+  expect(await page.evaluate(() => scrollY)).toBe(0);
+  await page.screenshot({
+    path: testInfo.outputPath("incoming-short-viewport.png"),
+  });
+  await page.route("**/api/capabilities", (route) =>
+    route.fulfill({
+      json: { voice: { available: false, reason: "NOT_CONFIGURED" } },
+    }),
+  );
+  await page.reload();
+  await expect(screen.getByRole("status")).toContainText("語音目前無法使用");
+  await expect(
+    screen.getByRole("button", { name: "接聽", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    screen.getByRole("button", { name: "拒接", exact: true }),
+  ).toBeEnabled();
+  const before = (await stats(page.request)).attempts;
+  await screen.getByRole("button", { name: "拒接", exact: true }).click();
+  await expect(page.locator(".report")).toBeVisible();
+  expect((await stats(page.request)).attempts).toBe(before);
+  expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(0);
+});
+test("dismissed calls preserve the workspace and later assignments open a new popup", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 600 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await start(page);
+  const first = await currentDrill(page);
+  await page.getByRole("button", { name: "收合來電視窗" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Accept using the existing API so the first assignment remains dismissed
+  // locally, then confirm a later assignment is not hidden by that choice.
+  const accepted = await page.request.post(
+    `/api/drills/${first.id}/calls/accept`,
+    {
+      data: { assignmentId: first.pendingCall.assignmentId },
+    },
+  );
+  const { callId } = await accepted.json();
+  await expect.poll(async () => (await currentDrill(page)).busy).toBe(false);
+  await page.request.post(`/api/drills/${first.id}/calls/${callId}/messages`, {
+    data: {
+      clientMessageId: crypto.randomUUID(),
+      text: "這是先前保留的對話紀錄。\n".repeat(50),
+    },
+  });
+  await expect.poll(async () => (await currentDrill(page)).busy).toBe(false);
+  await page.getByRole("button", { name: "掛斷本通" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  const next = await currentDrill(page);
+  expect(next.pendingCall.assignmentId).not.toBe(
+    first.pendingCall.assignmentId,
+  );
+  await page.keyboard.press("Escape");
+  await page.locator(".transcript").evaluate((node) => node.scrollTo(0, 100));
+  await page.evaluate(() => window.scrollTo(0, 180));
+  const position = () =>
+    page.evaluate(() => ({
+      page: scrollY,
+      chat: document.querySelector(".transcript").scrollTop,
+    }));
+  const before = await position();
+  expect(before.chat).toBe(100);
+  expect(before.page).toBeGreaterThan(0);
+  await page
+    .getByRole("button", { name: /查看來電/ })
+    .evaluate((node) => node.click());
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(await position()).toEqual(before);
+  await page.keyboard.press("Escape");
+  expect(await position()).toEqual(before);
+  expect((await currentDrill(page)).calls).toEqual(next.calls);
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+  await page
+    .getByRole("button", { name: /查看來電/ })
+    .evaluate((node) => node.click());
+  await page.getByRole("button", { name: "拒接", exact: true }).click();
+  await expect(page.locator(".report")).toBeVisible();
+  expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(0);
+});
 test("voice-only calls save speech automatically and keep text controls absent", async ({
   page,
 }) => {
@@ -112,10 +350,14 @@ test("voice-only calls save speech automatically and keep text controls absent",
     route.fulfill({ json: { deploymentMode: "gcp" } }),
   );
   await start(page);
+  await expect(page.locator(".incoming-call-badge")).toHaveText("林");
+  await expect(page.locator(".incoming-call-disclosure")).toContainText(
+    "逐字稿保存在 GCP 私人工作區",
+  );
   await expect(
     page.getByRole("button", { name: "接通對話", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.locator(".voice-panel small")).toContainText(
     "逐字稿保存在 GCP 私人工作區",
   );
@@ -158,12 +400,21 @@ test("voice-only calls save speech automatically and keep text controls absent",
   await page.getByRole("button", { name: "掛斷本通" }).click();
   await released(page);
   await expect(page.locator(".call")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "接聽", exact: true }),
+  ).toBeEnabled();
+  const previous = (await currentDrill(page)).calls[0];
+  const beforeDecline = (await stats(page.request)).attempts;
+  await page.getByRole("button", { name: "拒接", exact: true }).click();
+  await expect(page.locator(".report")).toBeVisible();
+  expect((await currentDrill(page)).calls).toEqual([previous]);
+  expect((await stats(page.request)).attempts).toBe(beforeDecline);
 });
 test("ATM drawer updates the drill balance and sends transfer and withdrawal evidence", async ({
   page,
 }, testInfo) => {
   await start(page);
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
 
   const tab = page.getByRole("button", { name: "ATM", exact: true });
@@ -211,7 +462,7 @@ test("Judge stops voice playback and report opens the exact voice evidence", asy
   page,
 }) => {
   await start(page);
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   expect((await stats(page.request)).connections.at(-1).greetings).toBe(1);
   // The first microphone frame emits another fixture utterance. Wait for it
@@ -242,7 +493,7 @@ test("mutual farewell makes Judge hang up without a manual click", async ({
   page,
 }) => {
   await start(page);
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await control(page.request, {
     action: "say",
@@ -264,17 +515,31 @@ test("permission denial creates no provider; retry succeeds; reload releases voi
   const before = (await stats(page.request)).attempts;
   await page.evaluate(() => {
     window.savedAcquire = navigator.mediaDevices.getUserMedia;
-    navigator.mediaDevices.getUserMedia = async () => {
-      throw new DOMException("denied", "NotAllowedError");
-    };
+    navigator.mediaDevices.getUserMedia = () =>
+      new Promise((_resolve, reject) => {
+        window.denyMicrophone = () =>
+          reject(new DOMException("denied", "NotAllowedError"));
+      });
   });
-  await page.getByRole("button", { name: "用語音接通" }).click();
-  await expect(page.getByRole("alert")).toContainText("請允許權限");
+  await page.getByRole("button", { name: "接聽" }).click();
+  await expect(page.locator(".incoming-call-status")).toHaveText(
+    "正在準備麥克風…",
+  );
+  await expect(
+    page.getByRole("button", { name: "接聽", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "拒接", exact: true }),
+  ).toBeDisabled();
+  await page.evaluate(() => window.denyMicrophone());
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "請允許權限",
+  );
   expect((await stats(page.request)).attempts).toBe(before);
   await page.evaluate(() => {
     navigator.mediaDevices.getUserMedia = window.savedAcquire;
   });
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
@@ -289,7 +554,7 @@ test("provider loss offers voice retry; a fresh attempt can end through Persona 
   page,
 }) => {
   await start(page);
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await control(page.request, { action: "disconnect" });
   await expect(page.getByRole("alert")).toContainText("語音連線無法使用");
@@ -308,12 +573,12 @@ test("duration limit stops voice and navigation releases the next call's microph
   await start(page);
   const id = new URL(page.url()).hash.slice(1);
   await control(page.request, { action: "duration", id, seconds: 0.6 });
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.locator(".call-end")).toHaveText("已達本通語音時間上限");
   await released(page);
   await control(page.request, { action: "duration", id, seconds: 180 });
-  await expect(page.getByRole("button", { name: "用語音接通" })).toBeEnabled();
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await expect(page.getByRole("button", { name: "接聽" })).toBeEnabled();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await page.getByRole("button", { name: /開始新演練/ }).click();
   await released(page);
@@ -327,7 +592,7 @@ test("reading earlier captions preserves scrolling and a growing caption keeps i
   page,
 }) => {
   await start(page);
-  await page.getByRole("button", { name: "用語音接通" }).click();
+  await page.getByRole("button", { name: "接聽" }).click();
   await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
   await expect(page.locator(".voice-message.user > p")).toContainText(
     "我想先瞭解情況",

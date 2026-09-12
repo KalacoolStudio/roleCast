@@ -3,6 +3,7 @@ import { connectDrill } from "./stage/feed.js";
 import { PlotEditor } from "./PlotEditor.jsx";
 import { Home, CastMark } from "./Home.jsx";
 import { MarketplaceIntro } from "./MarketplaceIntro.jsx";
+import { IncomingCall } from "./IncomingCall.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
@@ -79,6 +80,8 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [deploymentMode, setDeploymentMode] = useState(null);
   const [workspaceReady, setWorkspaceReady] = useState(false);
+  const [dismissedCallId, setDismissedCallId] = useState(null);
+  const incomingTrigger = useRef(null);
   const voice = useVoice(id, drill, voiceApi);
   const following = useRef(true);
   const [follow, setFollow] = useState(true);
@@ -95,6 +98,7 @@ function App() {
     setDrill(null);
     setError("");
     setShowHistory(false);
+    setDismissedCallId(null);
   }, []);
   const loadList = useCallback(async () => {
     const list = await api("/drills");
@@ -369,12 +373,25 @@ function App() {
                   {date(drill.createdAt)} · Plot v{drill.plot.version}
                 </p>
               </div>
-              <span
-                className={`state ${finished(drill.state) ? "ended" : ""}`}
-                role="status"
-              >
-                {drill.busy ? "正在回覆…" : labels[drill.state]}
-              </span>
+              {drill.pendingCall ? (
+                <button
+                  ref={incomingTrigger}
+                  type="button"
+                  className="state incoming-call-trigger"
+                  aria-haspopup="dialog"
+                  aria-controls="incoming-call-dialog"
+                  onClick={() => setDismissedCallId(null)}
+                >
+                  來電中 · 查看來電
+                </button>
+              ) : (
+                <span
+                  className={`state ${finished(drill.state) ? "ended" : ""}`}
+                  role="status"
+                >
+                  {drill.busy ? "正在回覆…" : labels[drill.state]}
+                </span>
+              )}
             </div>
             {drill.error && (
               <div className="error" role="alert">
@@ -386,6 +403,29 @@ function App() {
                 {voice.error}
               </div>
             )}
+            {drill.pendingCall && (
+              <IncomingCall
+                key={drill.pendingCall.assignmentId}
+                open={dismissedCallId !== drill.pendingCall.assignmentId}
+                onDismiss={() =>
+                  setDismissedCallId(drill.pendingCall.assignmentId)
+                }
+                returnFocusRef={incomingTrigger}
+                error={error || drill.error?.message || voice.error}
+                persona={drill.pendingCall.persona}
+                plotId={drill.plot.id}
+                acting={acting}
+                finishRequested={drill.finishRequested}
+                voice={voice}
+                onAnswer={startVoice}
+                onDecline={() => command("/finish")}
+              >
+                <VoiceDisclosure
+                  drill={drill}
+                  deploymentMode={deploymentMode}
+                />
+              </IncomingCall>
+            )}
             <div className="drill-workspace">
               <DrillStage
                 key={drill.id}
@@ -395,25 +435,6 @@ function App() {
                 connection={connection}
               />
               <div className="drill-conversation">
-                {drill.pendingCall && (
-                  <section className="incoming">
-                    <span className="avatar">
-                      {drill.pendingCall.persona.name.slice(0, 1)}
-                    </span>
-                    <div>
-                      <small>下一通對話</small>
-                      <h2>{drill.pendingCall.persona.name}</h2>
-                      <p>{drill.pendingCall.persona.role}</p>
-                    </div>
-                    <button
-                      className="primary voice-start"
-                      disabled={acting || voice.active || !voice.available}
-                      onClick={startVoice}
-                    >
-                      用語音接通 ↗
-                    </button>
-                  </section>
-                )}
                 <div
                   className="transcript"
                   ref={transcript}
@@ -481,7 +502,7 @@ function App() {
                     回到最新對話 ↓
                   </button>
                 )}
-                {(drill.state === "in_call" || drill.pendingCall) && (
+                {drill.state === "in_call" && (
                   <div className="voice-panel">
                     <div role="status">
                       {voice.state === "preparing"
@@ -535,18 +556,10 @@ function App() {
                         </button>
                       )
                     )}
-                    <small>
-                      語音會傳送至 OpenAI；
-                      {deploymentMode === "gcp"
-                        ? "逐字稿保存在 GCP 私人工作區。"
-                        : deploymentMode === "local"
-                          ? "本機僅保存逐字稿。"
-                          : "逐字稿儲存位置確認中。"}
-                      每通累計{" "}
-                      {Math.min(drill.plot.maxVoiceSecondsPerCall ?? 600, 600)}{" "}
-                      秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
-                      逐字稿可能不完整，播放狀態不代表整句已聽完。
-                    </small>
+                    <VoiceDisclosure
+                      drill={drill}
+                      deploymentMode={deploymentMode}
+                    />
                   </div>
                 )}
                 {!finished(drill.state) && (
@@ -633,6 +646,21 @@ function App() {
         </footer>
       </main>
     </div>
+  );
+}
+function VoiceDisclosure({ drill, deploymentMode }) {
+  return (
+    <small>
+      語音會傳送至 OpenAI；
+      {deploymentMode === "gcp"
+        ? "逐字稿保存在 GCP 私人工作區。"
+        : deploymentMode === "local"
+          ? "本機僅保存逐字稿。"
+          : "逐字稿儲存位置確認中。"}
+      每通累計 {Math.min(drill.plot.maxVoiceSecondsPerCall ?? 600, 600)}{" "}
+      秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
+      逐字稿可能不完整，播放狀態不代表整句已聽完。
+    </small>
   );
 }
 function Evidence({ ids, messages }) {
