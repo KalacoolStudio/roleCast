@@ -37,6 +37,7 @@ jobs:
       GCP_REPOSITORY: ${{ vars.GCP_REPOSITORY }}
       GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      GCP_APPLICATION_URL: ${{ vars.GCP_APPLICATION_URL }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -129,6 +130,9 @@ jobs:
           [[ "$outcome" == deployed || "$outcome" == already-current || "$outcome" == skipped-stale ]]
           {
             printf 'Outcome: %s\n\n' "$outcome"
+            if [[ "$GCP_APPLICATION_URL" =~ ^https://[a-z0-9.-]+\.run\.app$ ]]; then
+              printf 'HTTPS application: %s\n\n' "$GCP_APPLICATION_URL"
+            fi
             printf 'Private access: gcloud compute start-iap-tunnel %s 8080 --project=%s --zone=%s --local-host-port=127.0.0.1:18080\n' "$GCP_INSTANCE" "$GCP_PROJECT_ID" "$GCP_ZONE"
             echo 'Open http://127.0.0.1:18080 while the tunnel is running.'
           } >> "$GITHUB_STEP_SUMMARY"

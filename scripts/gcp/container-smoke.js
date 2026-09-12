@@ -61,13 +61,16 @@ function start(data, fixture = false) {
   if (fixture) args.push("node", "tests/support/container-server.js");
   docker(args);
 }
+let workspaceCookie = "";
 function api(path, body) {
-  const code = `import {readFileSync} from 'node:fs';const {path,body}=JSON.parse(readFileSync(0,'utf8'));const r=await fetch('http://127.0.0.1:8080'+path,body===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});console.log(JSON.stringify({status:r.status,text:await r.text()}));`;
-  return JSON.parse(
+  const code = `import {readFileSync} from 'node:fs';const {path,body,cookie}=JSON.parse(readFileSync(0,'utf8'));const r=await fetch('http://127.0.0.1:8080'+path,{headers:{cookie,'content-type':'application/json'},...(body===undefined?{}:{method:'POST',body:JSON.stringify(body)})});console.log(JSON.stringify({status:r.status,text:await r.text(),cookie:r.headers.get('set-cookie')}));`;
+  const response = JSON.parse(
     docker(["exec", "-i", name, "node", "--input-type=module", "-e", code], {
-      input: JSON.stringify({ path, body }),
+      input: JSON.stringify({ path, body, cookie: workspaceCookie }),
     }).stdout,
   );
+  if (response.cookie) workspaceCookie = response.cookie.split(";")[0];
+  return response;
 }
 async function until(fn) {
   let last;
@@ -116,6 +119,7 @@ try {
   assert.match(api("/").text, /<html/i);
   assert.deepEqual(json("/api/runtime"), { deploymentMode: "gcp" });
   assert.equal(json("/api/capabilities").voice.available, true);
+  assert.deepEqual(json("/api/workspace"), { ready: true });
   assert.equal(docker(["exec", name, "id", "-u"]).stdout.trim(), "1000");
   stop();
   // Host recovery helpers run as root; their read-only SQLite checks must not
@@ -140,6 +144,7 @@ try {
   stop();
   start(volume, true);
   await until(() => json("/api/health").status === "ok");
+  assert.deepEqual(json("/api/workspace"), { ready: true });
   const response = api("/api/sessions", { scenarioId: "anti-fraud" });
   assert.equal(response.status, 202);
   const { id } = JSON.parse(response.text);
