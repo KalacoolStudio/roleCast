@@ -88,6 +88,7 @@ function App() {
   const [managing, setManaging] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [showReports, setShowReports] = useState(initial.reports);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deploymentMode, setDeploymentMode] = useState(null);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [dismissedCallId, setDismissedCallId] = useState(null);
@@ -292,58 +293,91 @@ function App() {
     });
   return (
     <div className="shell">
-      <aside className="sidebar">
-        <a
-          className="brand"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            select("");
-          }}
-        >
-          <CastMark />
-          <span>
-            RoleCast<small>劇本大廳</small>
-          </span>
-        </a>
-        <button
-          className={`nav-item ${!id && !managing && !showIntro && !showReports ? "selected" : ""}`}
-          onClick={() => select("")}
-        >
-          <span>＋</span> 開始新演練
-        </button>
-        <button
-          className={`nav-item ${managing ? "selected" : ""}`}
-          onClick={() => {
-            voice.stop();
-            setShowIntro(false);
-            setShowReports(false);
-            reportsView.current = false;
-            setManaging(true);
-          }}
-        >
-          劇本工作室
-        </button>
-        <button
-          className={`nav-item ${showReports ? "selected" : ""}`}
-          onClick={() => openReports("")}
-        >
-          <span aria-hidden="true">▤</span> 歷史報告
-          <small className="nav-count">{drills.length}</small>
-        </button>
-        {activeId && (
-          <button className="nav-item" onClick={() => select(activeId)}>
-            <span className="live-dot" /> 繼續目前演練
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="sidebar-header">
+          <a
+            className="brand"
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              select("");
+            }}
+          >
+            <CastMark />
+            <span>
+              RoleCast<small>劇本大廳</small>
+            </span>
+          </a>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            aria-label={sidebarCollapsed ? "展開側邊欄" : "收合側邊欄"}
+            title={sidebarCollapsed ? "展開側邊欄" : "收合側邊欄"}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="sidebar-content"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <path d="M9 4v16" />
+              <path d={sidebarCollapsed ? "m13 9 3 3-3 3" : "m16 9-3 3 3 3"} />
+            </svg>
           </button>
-        )}
-        <div className="sidebar-foot">
-          <span className="live-dot" />
-          {deploymentMode === "gcp"
-            ? "雲端私人工作區"
-            : deploymentMode === "local"
-              ? "本機工作空間"
-              : "正在連線…"}
-          <small>對話演練 · 0.1</small>
+        </div>
+        <div
+          id="sidebar-content"
+          className="sidebar-content"
+          hidden={sidebarCollapsed}
+        >
+          <button
+            className={`nav-item ${!id && !managing && !showIntro && !showReports ? "selected" : ""}`}
+            onClick={() => select("")}
+          >
+            <span>＋</span> 開始新演練
+          </button>
+          <button
+            className={`nav-item ${managing ? "selected" : ""}`}
+            onClick={() => {
+              voice.stop();
+              setShowIntro(false);
+              setShowReports(false);
+              reportsView.current = false;
+              setManaging(true);
+            }}
+          >
+            劇本工作室
+          </button>
+          <button
+            className={`nav-item ${showReports ? "selected" : ""}`}
+            onClick={() => openReports("")}
+          >
+            <span aria-hidden="true">▤</span> 歷史報告
+            <small className="nav-count">{drills.length}</small>
+          </button>
+          {activeId && (
+            <button className="nav-item" onClick={() => select(activeId)}>
+              <span className="live-dot" /> 繼續目前演練
+            </button>
+          )}
+          <div className="sidebar-foot">
+            <span className="live-dot" />
+            {deploymentMode === "gcp"
+              ? "雲端私人工作區"
+              : deploymentMode === "local"
+                ? "本機工作空間"
+                : "正在連線…"}
+            <small>對話演練 · 0.1</small>
+          </div>
         </div>
       </aside>
       <main>
