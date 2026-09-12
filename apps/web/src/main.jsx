@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import "./style.css";
 import { useVoice } from "./use-voice.js";
 import { Conversation } from "./conversation.jsx";
+import { AtmDrawer } from "./AtmDrawer.jsx";
 
 const labels = {
   planning: "正在安排對話",
@@ -197,6 +198,11 @@ function App() {
       }
       return call.id;
     });
+  const atmAction = async (payload) => {
+    const result = await api(`/drills/${id}/calls/${call.id}/atm`, payload);
+    await refresh(id);
+    return result;
+  };
   const retry = () =>
     action(async () => {
       await api("/workspace");
@@ -618,7 +624,8 @@ function App() {
                         : deploymentMode === "local"
                           ? "本機僅保存逐字稿。"
                           : "逐字稿儲存位置確認中。"}
-                      每通累計 {drill.plot.maxVoiceSecondsPerCall ?? 180}{" "}
+                      每通累計{" "}
+                      {Math.min(drill.plot.maxVoiceSecondsPerCall ?? 600, 600)}{" "}
                       秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
                       逐字稿可能不完整，播放狀態不代表整句已聽完。
                     </small>
@@ -695,6 +702,12 @@ function App() {
                 </button>
               </section>
             )}
+            <AtmDrawer
+              drill={drill}
+              call={call}
+              enabled={voice.state === "active"}
+              onAction={atmAction}
+            />
           </div>
         )}
         <footer>

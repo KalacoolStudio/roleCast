@@ -98,7 +98,7 @@ The participant interface SHALL reject typed submissions. Stopping or losing voi
 
 ### Requirement: Voice configuration and usage bounds
 
-Server configuration SHALL use the existing `API_KEY` for both Live and text agents, support an optional Live base URL, use gpt-live-1, and default provider recording to disabled. It SHALL NOT require or consume `OPENAI_API_KEY`. Text agents SHALL prefer `API_KEY`, while continuing to accept legacy `LLM_API_KEY` when the shared key is absent or blank; `LLM_BASE_URL` and `LLM_MODEL` SHALL continue to configure text inference. Process environment values SHALL override `.env` for the same variable. Missing shared-key or invalid optional Live configuration SHALL disable only voice features when valid legacy text configuration exists. Public capability responses SHALL contain no secrets and SHALL distinguish configuration availability from verified provider access. Each call SHALL have a cumulative voice duration budget, defaulting to 180 seconds across its voice attempts; existing typed-turn and total-call limits SHALL remain in force for their respective scopes.
+Server configuration SHALL use the existing `API_KEY` for both Live and text agents, support an optional Live base URL, use gpt-live-1, and default provider recording to disabled. It SHALL NOT require or consume `OPENAI_API_KEY`. Text agents SHALL prefer `API_KEY`, while continuing to accept legacy `LLM_API_KEY` when the shared key is absent or blank; `LLM_BASE_URL` and `LLM_MODEL` SHALL continue to configure text inference. Process environment values SHALL override `.env` for the same variable. Missing shared-key or invalid optional Live configuration SHALL disable only voice features when valid legacy text configuration exists. Public capability responses SHALL contain no secrets and SHALL distinguish configuration availability from verified provider access. Each call SHALL have a cumulative voice duration budget of at most 600 seconds across its voice attempts; existing typed-turn and total-call limits SHALL remain in force for their respective scopes.
 
 #### Scenario: Shared OpenAI credential
 - **WHEN** `API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL` are configured without a separate voice key
@@ -117,8 +117,8 @@ Server configuration SHALL use the existing `API_KEY` for both Live and text age
 - **THEN** the call ends once with a duration-limit reason and proceeds through its normal Recap/report lifecycle; splitting captions or switching voice attempts does not reset that budget
 
 #### Scenario: Editable plot voice budget
-- **WHEN** an author saves or imports a plot with a voice duration limit between 1 and 3600 whole seconds
-- **THEN** newly created drills snapshot that limit, existing drills retain their original budget, and definitions without a limit default to 180 seconds
+- **WHEN** an author saves or imports a plot with a voice duration limit between 1 and 600 whole seconds
+- **THEN** newly created drills snapshot that limit, definitions without a limit default to 600 seconds, values above 600 seconds are rejected, existing lower budgets remain valid, and runtime caps any legacy higher budget at 600 seconds
 
 ### Requirement: Offline voice verification
 
