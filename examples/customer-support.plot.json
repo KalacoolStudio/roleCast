@@ -1,28 +1,11 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "plot": {
     "name": "客服溝通練習",
     "category": "溝通技巧",
     "description": "面對配送延遲的顧客，練習傾聽、澄清與提出下一步。",
     "duration": "約 5–10 分鐘",
     "goal": "以可查證事實處理顧客訴求，不承諾未知補償或到貨時間。",
-    "facts": [
-      {
-        "id": "shipment",
-        "key": "配送狀態",
-        "value": "虛構訂單尚在配送中，沒有確定到貨時間。"
-      }
-    ],
-    "criteria": [
-      {
-        "id": "clarify",
-        "description": "確認顧客主要訴求，區分已知資訊與未知事項。"
-      },
-      {
-        "id": "next-step",
-        "description": "提出可執行的查詢或回覆安排，不承諾未知結果。"
-      }
-    ],
     "stopCondition": "顧客訴求已澄清，並明確提出可執行的下一步時停止。",
     "maxCalls": 3,
     "maxUserTurnsPerCall": 12,

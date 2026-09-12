@@ -213,30 +213,7 @@ export function PlotEditor({ plots, api, onSaved, onUse }) {
             </div>
           </fieldset>
           <fieldset disabled={busy}>
-            <legend>固定事實與評估</legend>
-            <p className="hint">
-              固定事實供 Mastermind 指派給 Persona；評估判準供 Judge 與 Reporter
-              使用。ID 必須唯一。
-            </p>
-            <Rows
-              title="固定事實"
-              values={draft.facts}
-              fields={[
-                ["id", "事實 ID", 100],
-                ["key", "事實名稱", 120],
-                ["value", "事實內容", 2000],
-              ]}
-              change={(v) => change("facts", v)}
-            />
-            <Rows
-              title="評估判準"
-              values={draft.criteria}
-              fields={[
-                ["id", "判準 ID", 100],
-                ["description", "判準內容", 2000],
-              ]}
-              change={(v) => change("criteria", v)}
-            />
+            <legend>停止條件</legend>
             {field("stopCondition", "停止條件", 4000, true)}
           </fieldset>
           <fieldset disabled={busy}>
@@ -321,67 +298,5 @@ export function PlotEditor({ plots, api, onSaved, onUse }) {
         </form>
       )}
     </section>
-  );
-}
-function Rows({ title, values, fields, change }) {
-  return (
-    <div className="plot-rows">
-      <h3>
-        {title} <small>{values.length}/30</small>
-      </h3>
-      {values.map((row, index) => (
-        <div className="plot-row" key={index}>
-          {fields.map(([key, label, maxLength]) => {
-            const Input = maxLength > 120 ? "textarea" : "input";
-            return (
-              <label className="plot-field" key={key}>
-                <span>
-                  {label} {index + 1}
-                </span>
-                <Input
-                  required
-                  aria-label={`${label} ${index + 1}`}
-                  maxLength={maxLength}
-                  value={row[key]}
-                  onChange={(e) =>
-                    change(
-                      values.map((value, i) =>
-                        i === index
-                          ? { ...value, [key]: e.target.value }
-                          : value,
-                      ),
-                    )
-                  }
-                />
-              </label>
-            );
-          })}
-          <button
-            type="button"
-            aria-label={`移除${title} ${index + 1}`}
-            onClick={() => change(values.filter((_, i) => i !== index))}
-          >
-            移除
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        disabled={values.length >= 30}
-        onClick={() =>
-          change([
-            ...values,
-            Object.fromEntries(
-              fields.map(([key]) => [
-                key,
-                key === "id" ? crypto.randomUUID() : "",
-              ]),
-            ),
-          ])
-        }
-      >
-        ＋ 新增{title}
-      </button>
-    </div>
   );
 }

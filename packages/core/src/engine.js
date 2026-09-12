@@ -123,11 +123,7 @@ export class Engine {
         id: randomUUID(),
         personaId,
         goal: result.goal,
-        allowedFactIds: result.allowedFactIds,
         sharedMessageIds: result.sharedMessageIds,
-        facts: latest.plot.facts.filter((f) =>
-          result.allowedFactIds.includes(f.id),
-        ),
       };
       latest.assignments.push(assignment);
       latest.pendingAssignmentId = assignment.id;

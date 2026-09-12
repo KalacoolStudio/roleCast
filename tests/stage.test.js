@@ -88,6 +88,7 @@ it("commits a complete ordered handoff with stable identity, deduplication and p
   const raw = JSON.stringify(events);
   for (const privateValue of [
     "allowedFactIds",
+    "criterionIds",
     "personality",
     "prompts",
     "uncertainties",
@@ -150,7 +151,7 @@ it.each([1, 2])(
     expect(store.get(id).messages).toEqual(old.messages);
     store.recover();
     store.recover();
-    expect(store.db.pragma("user_version", { simple: true })).toBe(5);
+    expect(store.db.pragma("user_version", { simple: true })).toBe(6);
     expect(store.events(id).events.map((e) => e.type)).toEqual([
       "call_ended",
       "drill_interrupted",

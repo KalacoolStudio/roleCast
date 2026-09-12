@@ -16,7 +16,7 @@ import {
   plotDefinitionSchema,
 } from "../../core/src/plot-contracts.js";
 
-export const databaseSchemaVersion = 5;
+export const databaseSchemaVersion = 6;
 export const defaultWorkspaceId = "default";
 const collections = [
   "personas",
@@ -148,6 +148,39 @@ export class Store {
               `);
             }
             this.db.pragma("user_version = 5");
+          })();
+        if (version < 6)
+          this.db.transaction(() => {
+            const rewrite = (table, transform) => {
+              const update = this.db.prepare(
+                `UPDATE ${table} SET payload=? WHERE rowid=?`,
+              );
+              for (const row of this.db
+                .prepare(`SELECT rowid,payload FROM ${table}`)
+                .all()) {
+                const value = JSON.parse(row.payload);
+                transform(value);
+                update.run(JSON.stringify(value), row.rowid);
+              }
+            };
+            const stripPlot = (plot) => {
+              if (!plot || typeof plot !== "object") return;
+              delete plot.facts;
+              delete plot.criteria;
+            };
+            rewrite("plots", stripPlot);
+            rewrite("sessions", (session) => {
+              stripPlot(session.plot);
+              stripPlot(session.scenario);
+            });
+            rewrite("assignments", (assignment) => {
+              delete assignment.allowedFactIds;
+              delete assignment.facts;
+            });
+            rewrite("watches", (watch) => {
+              delete watch.criterionIds;
+            });
+            this.db.pragma("user_version = 6");
           })();
       })();
     } catch (error) {

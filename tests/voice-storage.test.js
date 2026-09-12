@@ -145,7 +145,7 @@ it("migrates a version-1 text database transactionally and recovers committed pe
   );
   v1.close();
   let store = new Store(path);
-  expect(store.db.pragma("user_version", { simple: true })).toBe(5);
+  expect(store.db.pragma("user_version", { simple: true })).toBe(6);
   expect(store.get(id).messages).toEqual(before);
   expect(store.db.pragma("foreign_key_check")).toEqual([]);
   store.voice.create(id, callId, "pending");
@@ -243,7 +243,7 @@ it.each(["voice-v2", "main-v3"])(
     }
     old.close();
     let store = new Store(path);
-    expect(store.db.pragma("user_version", { simple: true })).toBe(5);
+    expect(store.db.pragma("user_version", { simple: true })).toBe(6);
     expect(store.get(id)).toMatchObject({
       plot: before.plot,
       calls: before.calls,

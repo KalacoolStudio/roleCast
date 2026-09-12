@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { builtInPlots } from "../packages/core/src/plots.js";
 import {
+  blankPlot,
+  defaultJudgePrompt,
+  defaultMastermindPrompt,
   parsePlot,
   plotDefinition,
   exportPlot,
@@ -23,32 +26,40 @@ it("validates authoring and portable JSON without accepting incomplete, conflict
   const good = definition();
   expect(good.maxVoiceSecondsPerCall).toBe(600);
   expect(importPlot(exportPlot(builtInPlots[0]))).toEqual(good);
+  expect(JSON.parse(exportPlot(good)).formatVersion).toBe(2);
+  expect(builtInPlots[0].prompts).toMatchObject({
+    mastermind: defaultMastermindPrompt,
+    judge: defaultJudgePrompt,
+  });
+  expect(blankPlot().prompts).toMatchObject({
+    mastermind: defaultMastermindPrompt,
+    judge: defaultJudgePrompt,
+  });
+  const legacy = {
+    formatVersion: 1,
+    plot: {
+      ...good,
+      facts: [{ id: "order", key: "order", value: "legacy" }],
+      criteria: [{ id: "recognition", description: "legacy" }],
+    },
+  };
+  expect(importPlot(JSON.stringify(legacy))).toEqual(good);
   for (const invalid of [
     { ...good, name: " " },
     { ...good, prompts: { mastermind: "only one" } },
     { ...good, prompts: { ...good.prompts, judge: "x".repeat(12001) } },
-    { ...good, facts: [good.facts[0], good.facts[0]] },
-    { ...good, facts: [good.facts[0], { ...good.facts[0], id: "different" }] },
-    { ...good, criteria: [good.criteria[0], good.criteria[0]] },
+    { ...good, facts: [] },
     { ...good, criteria: [] },
     { ...good, maxCalls: 4 },
     { ...good, maxUserTurnsPerCall: 13 },
     { ...good, maxVoiceSecondsPerCall: 601 },
-    {
-      ...good,
-      facts: Array.from({ length: 31 }, (_, i) => ({
-        id: `f${i}`,
-        key: `k${i}`,
-        value: "fact",
-      })),
-    },
     { ...good, unexpected: "unsupported" },
   ])
     expect(() => parsePlot(invalid)).toThrow();
   for (const invalid of [
     "not JSON",
     "x".repeat(262145),
-    JSON.stringify({ formatVersion: 2, plot: good }),
+    JSON.stringify({ formatVersion: 3, plot: good }),
     JSON.stringify({ ...good, id: "not-an-envelope" }),
   ])
     expect(() => importPlot(invalid)).toThrow();
@@ -118,12 +129,7 @@ it("routes plot prompts independently, snapshots edits, and uses Reporter with o
   }
   const report = h.agents.calls.find((c) => c.kind === "report");
   expect(report.prompt).toContain("你是 Reporter");
-  expect(Object.keys(report.context)).toEqual([
-    "goal",
-    "criteria",
-    "messages",
-    "recaps",
-  ]);
+  expect(Object.keys(report.context)).toEqual(["goal", "messages", "recaps"]);
   expect(h.store.get(id).plot).toEqual(snapshot.plot);
   expect(h.store.get(id).prompts).toEqual(snapshot.prompts);
   expect(JSON.stringify(h.engine.view(id))).not.toMatch(
@@ -180,9 +186,26 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
   for (const row of h.store.list()) {
     const { plot, ...rest } = row;
     const { prompts: _authorPrompts, ...scenario } = plot;
+    scenario.facts = [{ id: "legacy-fact", key: "legacy", value: "legacy" }];
+    scenario.criteria = [{ id: "legacy-criterion", description: "legacy" }];
     h.store.db
       .prepare("UPDATE sessions SET payload=? WHERE id=?")
       .run(JSON.stringify({ ...rest, scenario }), row.id);
+  }
+  for (const table of ["assignments", "watches"]) {
+    const update = h.store.db.prepare(
+      `UPDATE ${table} SET payload=? WHERE rowid=?`,
+    );
+    for (const row of h.store.db
+      .prepare(`SELECT rowid,payload FROM ${table}`)
+      .all()) {
+      const payload = JSON.parse(row.payload);
+      if (table === "assignments") {
+        payload.allowedFactIds = ["legacy-fact"];
+        payload.facts = [scenarioFact()];
+      } else payload.criterionIds = ["legacy-criterion"];
+      update.run(JSON.stringify(payload), row.rowid);
+    }
   }
   h.store.db.exec("DROP TABLE plots; PRAGMA user_version=1;");
   h.close();
@@ -194,14 +217,21 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
     store.close();
   });
   store.recover();
-  expect(store.db.pragma("user_version", { simple: true })).toBe(5);
+  expect(store.db.pragma("user_version", { simple: true })).toBe(6);
   expect(store.get(id).prompts).toEqual(completed.prompts);
   expect(store.get(id).messages).toEqual(completed.messages);
   expect(store.get(id).report).toEqual(completed.report);
   expect(engine.view(id).plot.id).toBe("anti-fraud");
   expect(engine.view(active).state).toBe("interrupted");
+  expect(JSON.stringify(store.get(id))).not.toMatch(
+    /allowedFactIds|criterionIds|"facts"|"criteria"/,
+  );
   expect(agents.calls).toHaveLength(0);
 });
+
+function scenarioFact() {
+  return { id: "legacy-fact", key: "legacy", value: "legacy" };
+}
 
 it("supports canonical authoring/drill APIs and legacy lifecycle without leaking prompts in public views", async () => {
   const h = harness();
@@ -231,6 +261,15 @@ it("supports canonical authoring/drill APIs and legacy lifecycle without leaking
     payload: definition(),
   });
   expect(created.statusCode).toBe(201);
+  expect(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/plots",
+        payload: { ...definition(), facts: [] },
+      })
+    ).statusCode,
+  ).toBe(400);
   const plot = created.json();
   expect((await app.inject(`/api/plots/${plot.id}`)).json().prompts).toEqual(
     plot.prompts,

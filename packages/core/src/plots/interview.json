@@ -6,32 +6,6 @@
   "description": "練習說清楚技術選擇，從資料庫遷移到高流量下的架構取捨。",
   "duration": "約 10–15 分鐘",
   "goal": "透過不同面試角色或同一角色追問，評估資料庫遷移、並行一致性、流量控制及清楚表達取捨的能力。根據實際回答追問，不假設履歷未提供的經歷。",
-  "facts": [
-    {
-      "id": "position",
-      "key": "position",
-      "value": "虛構公司正在招募後端工程師"
-    },
-    {
-      "id": "system",
-      "key": "system",
-      "value": "情境為需持續提供服務的電商後端，促銷可能帶來十倍流量"
-    }
-  ],
-  "criteria": [
-    {
-      "id": "data",
-      "description": "說明遷移策略、驗證與回退，以及並行資料一致性"
-    },
-    {
-      "id": "scale",
-      "description": "說明限流、降級與非同步處理的取捨和失敗條件"
-    },
-    {
-      "id": "communication",
-      "description": "用具體假設與證據清楚表達，不以術語堆砌代替推理"
-    }
-  ],
   "stopCondition": "本通有足夠具體回答支持評估或當前面向已充分深入時可停止；簡短附和不是能力證據。",
   "maxCalls": 3,
   "maxUserTurnsPerCall": 12,

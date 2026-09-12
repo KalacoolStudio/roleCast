@@ -245,6 +245,6 @@ it("migrates an unscoped v4 database into the first private workspace", async ()
   expect(
     (await request(app, workspace, "/api/drills")).json().drills[0].id,
   ).toBe(drillId);
-  expect(store.db.pragma("user_version", { simple: true })).toBe(5);
+  expect(store.db.pragma("user_version", { simple: true })).toBe(6);
   expect(store.db.pragma("foreign_key_check")).toEqual([]);
 });

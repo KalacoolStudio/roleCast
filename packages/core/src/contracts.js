@@ -23,10 +23,7 @@ export const personaSchema = z
     personality: text,
   })
   .strict();
-export const factSchema = z
-  .object({ id: z.string().min(1), key: text, value: text })
-  .strict();
-const assignment = { goal: text, allowedFactIds: ids, sharedMessageIds: ids };
+const assignment = { goal: text, sharedMessageIds: ids };
 export const planSchema = z.discriminatedUnion("action", [
   z
     .object({
@@ -51,7 +48,6 @@ export const watchSchema = z
   .object({
     stop: z.boolean(),
     reason: text,
-    criterionIds: ids,
     evidenceIds: ids,
   })
   .strict();
@@ -121,9 +117,6 @@ export function validateResult(kind, value, context) {
   const messages = context.messages || [];
   validateReferences(result, new Set(messages.map((m) => m.id)));
   if (kind === "plan" && result.action !== "finish") {
-    const facts = new Set(context.plot.facts.map((f) => f.id));
-    if (result.allowedFactIds.some((id) => !facts.has(id)))
-      throw new Error("Unknown fixed fact");
     const sourceIds = new Set(
       messages.filter((m) => m.speaker === "user").map((m) => m.id),
     );
@@ -140,15 +133,8 @@ export function validateResult(kind, value, context) {
     )
       throw new Error("Persona identity already exists");
   }
-  if (kind === "watch") {
-    const criteria = new Set(context.criteria.map((c) => c.id));
-    if (
-      result.criterionIds.some((id) => !criteria.has(id)) ||
-      (result.stop &&
-        (!result.evidenceIds.length || !result.criterionIds.length))
-    )
-      throw new Error("Stop decision requires valid evidence and criteria");
-  }
+  if (kind === "watch" && result.stop && !result.evidenceIds.length)
+    throw new Error("Stop decision requires valid evidence");
   if (kind === "recap" && result.endReason !== context.endReason)
     throw new Error("Wrong end reason");
   if (

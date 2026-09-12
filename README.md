@@ -101,7 +101,7 @@ just tunnel
 **Plot 是可重用的劇本；Drill 是使用該劇本進行的一次演練。** 一個 plot 可以產生多個各自獨立的 drill。
 
 1. 左側開啟「劇本工作室」，按「新增劇本」，或複製內建防詐／面試劇本。
-2. 填寫名稱、簡介、目標、固定事實、評估判準、停止條件與回合上限。固定事實的 ID／名稱和判準 ID 必須唯一；至少一項判準。
+2. 填寫名稱、簡介、目標、停止條件與回合上限。新增劇本會預填目前防詐劇本的 Mastermind／Judge 指引，可直接修改成其他演練。
 3. 分別編輯三個角色的 prompts：
 
 | 欄位                 | 用途                                   |
@@ -115,9 +115,11 @@ just tunnel
 
 自訂 prompts 只設定角色行為、評估重點與語氣，不能重新定義輸出欄位。固定 system instruction、輸出 schema 與允許引用的 ID 由程式產生；自訂指引與對話放在較低優先權的輸入資料中。Persona 的基本對話 prompt 由系統管理，Mastermind 透過人設與任務讓不同 plot 有不同對話風格。
 
-例如自訂 Judge prompt 提到 `shouldStop`／`confidence`，系統仍要求既有 `stop` 與證據欄位；Mastermind 的人設限制放入既有 personality、任務放入 goal，不新增 capabilities 或 assignment 欄位。驗證失敗時，系統提供錯誤類別與欄位位置，最多重試一次。每次輸出預算 4,000 tokens，只有截斷時重試提高至 8,000；嚴格格式仍不能取代對證據內容的判斷。
+Mastermind 的每次指派只包含 Persona 任務與明確共享的使用者訊息；系統不再保存或傳遞固定事實與評估判準。Persona 對任務及自身歷史以外的細節應表示不確定。Judge 依劇本的 Judge prompt、停止條件及本通證據決定是否收線；Reporter 則依目標、逐字稿與 Recap 自行整理報告面向。
 
-每個 prompt 最多 12,000 字元，固定事實及判準各最多 30 項，JSON 檔案／儲存請求最多 256 KB。JSON 格式為 `{ "formatVersion": 1, "plot": { ... } }`；不含 plot ID、版本或 drill 紀錄。編輯器欄位與匯入使用相同驗證規則。
+例如自訂 Judge prompt 提到 `shouldStop`／`confidence`，系統仍要求既有 `stop`、`reason` 與 `evidenceIds`；`stop=true` 至少要引用一則實際訊息。Mastermind 的人設限制放入既有 personality、任務放入 goal，不新增 capabilities 或 assignment 欄位。驗證失敗時，系統提供錯誤類別與欄位位置，最多重試一次。每次輸出預算 4,000 tokens，只有截斷時重試提高至 8,000；嚴格格式仍不能取代對證據內容的判斷。
+
+每個 prompt 最多 12,000 字元，JSON 檔案／儲存請求最多 256 KB。新匯出格式為 `{ "formatVersion": 2, "plot": { ... } }`，不含 plot ID、版本或 drill 紀錄。匯入舊版 `formatVersion: 1` 時會移除已停用的 `facts`／`criteria` 後開啟草稿；目前格式若包含未知欄位則拒絕。
 
 Plot 定義保存在 SQLite。內建 JSON 僅於資料庫缺少對應 ID 時載入，之後請透過工作室修改。**開始 drill 時會保存 plot 版本與實際 prompts；編輯劇本不會改寫現有 drill。**
 
@@ -193,11 +195,11 @@ Judge 每秒取得新增逐字片段，逐次檢查累積證據；檢查期間�
 - `GET /api/drills/:id` 的 `stage` 含公開 revision、事件 watermark 與 Persona 外觀映射；原回應欄位保留。
 - `GET /api/drills/:id/events?after=0&limit=100`：有序公開事件，limit 上限 500，回傳 nextCursor／hasMore／latestSequence；非法游標 400、超前游標 409、未知 drill 404。
 - `GET /api/drills/:id/events/stream?after=N`：SSE 的 stage 事件含 sequence 作為 id，snapshot 訊息提供公開快照；重新連線的 Last-Event-ID 優先。先讀快照、再從 watermark 訂閱可避免重播歷史。
-- 舊 `/api/scenarios`、`/api/sessions` 仍接受舊欄位並回傳相容投影。Drill API 不含私有 prompts 或固定事實，作者 API 會提供完整 plot。資料 API 需要由 `/api/workspace` 建立的 HttpOnly 工作區 Cookie；跨工作區存取一律視為找不到資源。
+- 舊 `/api/scenarios`、`/api/sessions` 仍回傳相容的 plot／drill 投影；目前的 plot 建立與更新 API 會拒絕已移除的 `facts`／`criteria`。Drill API 不含私有 prompts，作者 API 會提供完整 plot。資料 API 需要由 `/api/workspace` 建立的 HttpOnly 工作區 Cookie；跨工作區存取一律視為找不到資源。
 
-首次啟動會將 SQLite 升級至 **v5**，同時支援劇本、舞台、語音證據與私人工作區。可從文字 v1、劇本 v2、舞台 v3、完整 v4，以及語音分支曾使用的 v2 升級；遷移會辨識既有資料表並在同一交易內完成，保留舊 ID、逐字稿、報告、已編輯劇本、operation prompts、事件順序與語音片段。升級前的既有資料會歸入第一個開啟服務的瀏覽器工作區。舊紀錄不補造歷史事件；服務重啟會封存待處理的語音文字，並將進行中的 drill 標為中斷且只保存一次中斷事件。
+首次啟動會將 SQLite 升級至 **v6**，同時支援劇本、舞台、語音證據與私人工作區。可從文字 v1、劇本 v2、舞台 v3、完整 v4／v5，以及語音分支曾使用的 v2 升級；遷移會辨識既有資料表並在同一交易內完成，移除舊 plot／assignment／Watch 中的 fact 與 criterion 欄位，同時保留舊 ID、逐字稿、報告、已編輯劇本、operation prompts、事件順序與語音片段。升級前的既有資料會歸入第一個開啟服務的瀏覽器工作區。舊紀錄不補造歷史事件；服務重啟會封存待處理的語音文字，並將進行中的 drill 標為中斷且只保存一次中斷事件。
 
-升級前先停止後端並備份整個 `data/`（若自訂 DATABASE_PATH，備份該資料庫與相關檔案）。若需回退舊程式，請停止服務後還原升級前備份；舊程式不能直接開啟 v5，也不能只改小 user_version。回復備份會失去備份之後新增的紀錄。
+升級前先停止後端並備份整個 `data/`（若自訂 DATABASE_PATH，備份該資料庫與相關檔案）。若需回退舊程式，請停止服務後還原升級前備份；舊程式不能直接開啟 v6，也不能只改小 user_version。回復備份會失去備份之後新增的紀錄。
 
 ## 驗證與故障排除
 
@@ -212,7 +214,7 @@ just check
 - 「請檢查設定」：修正列出的 `.env` 欄位後重新啟動。
 - 「模型 API 驗證失敗」：確認金鑰與端點屬於同一服務。
 - 「模型 API 不接受此請求」：確認模型 ID、Chat Completions 協定與 base URL 路徑。
-- 「模型回應未通過格式或證據驗證」：訊息會標示角色階段與原因，例如 `SCHEMA`（欄位／型別）、`EVIDENCE_ID`（引用不存在的訊息）或 `STOP_EVIDENCE`（停止判斷缺少證據／判準）。先確認自訂指引只描述行為與評估目標；若持續失敗，可換用更能遵循指令與引用規則的模型。
+- 「模型回應未通過格式或證據驗證」：訊息會標示角色階段與原因，例如 `SCHEMA`（欄位／型別）、`EVIDENCE_ID`（引用不存在的訊息）或 `STOP_EVIDENCE`（停止判斷缺少證據）。先確認自訂指引只描述行為與評估目標；若持續失敗，可換用更能遵循指令與引用規則的模型。
 - 「模型回應超過長度上限」：已提高預算重試仍被截斷，請精簡角色指引中的輸出要求。
 - 「模型 API 不接受此請求」：檢查模型是否支援目前的 `LLM_OUTPUT_MODE`；相容端點可依供應商能力設定 `json_object` 或 `text`，修改後重啟 `just dev`。
 - 連接埠衝突：停止佔用程式或設定後端 PORT；開發前端固定使用 5173。
@@ -239,7 +241,7 @@ just check
 
 - 內建及自訂 plot 是否能以繁體中文開場及自然追問。
 - 各 plot 的 Mastermind／Judge／Reporter 指引是否反映在對應行為，編輯後的新 drill 是否使用新版本。
-- 同角色回撥是否延續自身記憶，且未改變身分或固定事實。
+- 同角色回撥是否延續自身記憶與身分，且沒有取得其他角色未共享的對話。
 - 明確質疑詐騙並提出官方查證時是否合理停止；單純「好」不應當成已達標。
 - 面試評語是否反映實際回答，引用是否對照原文。
 - 結束整場或失敗後是否保留紀錄，且沒有遲到回覆。

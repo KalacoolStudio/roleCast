@@ -223,10 +223,17 @@ test("new plot authoring validates imports and preserves drafts on conflicts", a
     page.getByRole("heading", { name: "新增劇本", exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "＋ 新增劇本" }).click();
+  await expect(page.getByLabel("固定事實")).toHaveCount(0);
+  await expect(page.getByLabel("評估判準")).toHaveCount(0);
+  await expect(page.getByLabel("Mastermind prompt")).toHaveValue(
+    "從虛構購物客服來電開始，按受測者反應安排後續角色或回撥，練習異常要求識別與獨立查證。所有資金操作僅口頭模擬。",
+  );
+  await expect(page.getByLabel("Judge prompt")).toHaveValue(
+    "聚焦異常識別、敏感資訊保護與獨立查證。簡短拒絕不等於識破，明確質疑詐騙且提出獨立查證才能依停止條件中斷。",
+  );
   await page.getByLabel("劇本名稱", { exact: true }).fill("危機溝通");
   await page.getByLabel("劇本簡介").fill("練習對外說明事件。");
   await page.getByLabel("演練目標").fill("用可查證事實解釋事件。");
-  await page.getByLabel("判準內容 1").fill("區分事實與推測。");
   await page.getByLabel("停止條件").fill("已說明事實並提出下一步。");
   await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");

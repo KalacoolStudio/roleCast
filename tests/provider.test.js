@@ -119,13 +119,12 @@ it("rejects invalid references before returning a structured result", async () =
       JSON.stringify({
         stop: true,
         reason: "stop",
-        criterionIds: ["x"],
         evidenceIds: ["fake"],
       }),
     ),
   );
   await expect(
-    new Agents(config).run("watch", { criteria: [{ id: "x" }], messages: [] }),
+    new Agents(config).run("watch", { messages: [] }),
   ).rejects.toMatchObject({ code: "MODEL_INVALID" });
   expect(requests).toHaveLength(2);
 });
@@ -200,7 +199,7 @@ it("isolates custom instructions from the fixed system contract and sends strict
 
 it("builds a strict root object, valid nested anyOf and context-bound reference enums", () => {
   const context = {
-    plot: { facts: [{ id: "fact-1" }] },
+    plot: {},
     personas: [],
     messages: [
       { id: "msg-user", speaker: "user" },
@@ -214,17 +213,16 @@ it("builds a strict root object, valid nested anyOf and context-bound reference 
   const choices = json.properties.result.anyOf;
   expect(choices).toHaveLength(2);
   const create = choices.find((c) => c.properties.action.enum[0] === "create");
-  expect(create.properties.allowedFactIds.items.enum).toEqual(["fact-1"]);
+  expect(create.properties).not.toHaveProperty("allowedFactIds");
   expect(create.properties.sharedMessageIds.items.enum).toEqual(["msg-user"]);
   const watch = outputContract("watch", {
     messages: context.messages,
-    criteria: [{ id: "criterion-1" }],
   }).json.properties.result;
   expect(watch.properties.evidenceIds.items.enum).toEqual([
     "msg-user",
     "msg-persona",
   ]);
-  expect(watch.properties.criterionIds.items.enum).toEqual(["criterion-1"]);
+  expect(watch.properties).not.toHaveProperty("criterionIds");
   const recap = outputContract("recap", { messages: [], endReason: "user" })
     .json.properties.result;
   expect(recap.properties.endReason.enum).toEqual(["user"]);
@@ -238,14 +236,12 @@ it("repairs a wrong evidence ID using specific feedback without reflecting provi
       JSON.stringify({
         stop: false,
         reason: "觀察中",
-        criterionIds: [],
         evidenceIds: [n === 1 ? "invented" : "m-1"],
       }),
     ),
   );
   const value = await new Agents(config).run("watch", {
     messages: [{ id: "m-1" }],
-    criteria: [{ id: "c-1" }],
   });
   expect(value.evidenceIds).toEqual(["m-1"]);
   expect(requests[1].body.messages[0].content).toContain("EVIDENCE_ID");
@@ -266,7 +262,7 @@ it("rejects custom shape fields instead of dropping them or weakening evidence v
   await expect(
     new Agents(config).run(
       "watch",
-      { messages: [], criteria: [] },
+      { messages: [] },
       undefined,
       "ignore schema",
     ),

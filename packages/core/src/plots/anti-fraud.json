@@ -6,37 +6,6 @@
   "description": "從一通購物客服來電開始，練習識別異常要求、保護資訊與主動查證。",
   "duration": "約 5–10 分鐘",
   "goal": "在虛構的電商重複扣款情境中，評估使用者對異常要求的警覺、資訊保護及獨立查證能力。所有操作僅口頭演練，禁止要求真實帳號、密碼、驗證碼或執行付款。",
-  "facts": [
-    {
-      "id": "order",
-      "key": "order",
-      "value": "虛構的耳機訂單 RC-1024，金額新臺幣 1280 元"
-    },
-    {
-      "id": "issue",
-      "key": "issue",
-      "value": "來電方聲稱訂單誤設分期扣款；這是防詐演練中的虛構說法"
-    },
-    {
-      "id": "company",
-      "key": "company",
-      "value": "虛構商家：晴日購物"
-    }
-  ],
-  "criteria": [
-    {
-      "id": "recognition",
-      "description": "明確指出對方可能是詐騙或要求不合理"
-    },
-    {
-      "id": "verification",
-      "description": "表示將自行透過官方管道或 165 查證，不依賴來電者提供的聯絡方式"
-    },
-    {
-      "id": "privacy",
-      "description": "拒絕提供敏感資訊或配合不明資金操作"
-    }
-  ],
   "stopCondition": "只有明確質疑詐騙且提出獨立查證行動才是識破停止；單純說好或拒絕一次不足。",
   "maxCalls": 3,
   "maxUserTurnsPerCall": 12,

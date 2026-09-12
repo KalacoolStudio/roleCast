@@ -20,7 +20,6 @@ export function fixtureAgents(overrides = {}, ms = 0) {
           return { action: "finish" };
         const assignment = {
           goal: "練習提出清楚的理由。",
-          allowedFactIds: context.plot.facts.map((f) => f.id),
           sharedMessageIds: [],
         };
         if (context.calls.length === 1)
@@ -55,7 +54,6 @@ export function fixtureAgents(overrides = {}, ms = 0) {
         return {
           stop,
           reason: stop ? "明確識破並提出查證" : "尚需更多證據",
-          criterionIds: stop ? ["recognition", "verification"] : [],
           evidenceIds,
         };
       }

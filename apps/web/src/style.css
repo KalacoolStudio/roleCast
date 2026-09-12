@@ -1114,9 +1114,7 @@ footer span {
 }
 .plot-toolbar button:not(.primary),
 .file-button,
-.plot-save-bar button:not(.primary),
-.plot-rows > button,
-.plot-row > button {
+.plot-save-bar button:not(.primary) {
   padding: 10px 16px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -1218,27 +1216,6 @@ footer span {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
-.plot-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 12px;
-  align-items: end;
-  border-bottom: 1px solid #f2eee8;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-}
-.plot-row > button {
-  justify-self: start;
-  margin-bottom: 14px;
-}
-.plot-rows h3 {
-  margin-top: 28px;
-}
-.plot-rows h3 small {
-  color: var(--muted);
-  font-weight: 400;
-  font-size: 12px;
-}
 .plot-save-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1257,8 +1234,7 @@ footer span {
     padding: 28px 20px;
   }
   .plot-library,
-  .plot-two-columns,
-  .plot-row {
+  .plot-two-columns {
     grid-template-columns: minmax(0, 1fr);
   }
   .plot-form fieldset {

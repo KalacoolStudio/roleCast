@@ -159,7 +159,6 @@ describe("cancellation and concurrent work", () => {
       watch.resolve({
         stop: true,
         reason: "達標",
-        criterionIds: ["recognition", "verification"],
         evidenceIds: [evidence],
       });
       await until(() => h.store.get(id).state === "completed");
@@ -280,7 +279,7 @@ describe("cancellation and concurrent work", () => {
   });
 });
 describe("context and contract boundaries", () => {
-  it("validates immutable facts, identity, evidence and input lengths", async () => {
+  it("validates identity, shared messages, evidence and input lengths", async () => {
     const h = make();
     const { id } = await ready(h);
     const s = h.store.get(id);
@@ -289,12 +288,11 @@ describe("context and contract boundaries", () => {
       action: "reuse",
       personaId: s.personas[0].id,
       goal: "goal",
-      allowedFactIds: ["order"],
       sharedMessageIds: [],
     };
     expect(() => validateResult("plan", base, context)).not.toThrow();
     for (const bad of [
-      { ...base, allowedFactIds: ["invented"] },
+      { ...base, allowedFactIds: [] },
       { ...base, facts: [{ key: "order", value: "wrong" }] },
       { ...base, personaId: "unknown" },
       { ...base, sharedMessageIds: ["unknown"] },
@@ -312,26 +310,25 @@ describe("context and contract boundaries", () => {
     };
     expect(() => validateResult("report", report, context)).toThrow();
   });
-  it("keeps private facts/prompts out of API view and limits Judge/Persona inputs", async () => {
+  it("keeps private prompts out of API view and limits Judge/Persona inputs", async () => {
     const h = make();
     const { id, callId } = await ready(h);
     h.engine.send(id, callId, "x", "好");
     await until(() => !h.store.get(id).busy);
     const view = JSON.stringify(h.engine.view(id));
-    expect(view).not.toContain("allowedFactIds");
+    expect(view).not.toMatch(/allowedFactIds|criterionIds|"facts"|"criteria"/);
     expect(view).not.toContain("personality");
     expect(view).not.toContain("stopCondition");
     expect(view).not.toContain("prompts");
     const watch = h.agents.calls.find((v) => v.kind === "watch");
     expect(Object.keys(watch.context)).toEqual([
-      "criteria",
       "stopCondition",
       "messages",
       "endReason",
     ]);
     const reply = h.agents.calls.find((v) => v.kind === "reply");
     expect(reply.prompt).toContain("未知細節");
-    expect(reply.context).not.toHaveProperty("criteria");
+    expect(reply.context).not.toHaveProperty("facts");
     expect(h.store.get(id).watches[0].stop).toBe(false);
   });
 });

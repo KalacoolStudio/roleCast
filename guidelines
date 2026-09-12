@@ -4,7 +4,7 @@ Role Cast 是通用的多角色文字演練與評估系統。使用者可建立�
 
 ## 1. 基本概念
 
-- **Plot（劇本）**：可重用、可編輯的演練定義，包含介紹、目標、固定事實、評估判準、停止條件、上限，以及 Mastermind／Judge／Reporter 三種 prompts。
+- **Plot（劇本）**：可重用、可編輯的演練定義，包含介紹、目標、停止條件、上限，以及 Mastermind／Judge／Reporter 三種 prompts。
 - **Drill（演練）**：一次實際執行。每次開始都建立新的 ID、逐字稿、角色名冊與報告。一個 plot 可產生多次 drill。
 - **Call（通話）**：drill 內的一段文字互動；同一通固定一位 Persona，可在後續通話回撥或換人。
 
@@ -14,7 +14,7 @@ Role Cast 是通用的多角色文字演練與評估系統。使用者可建立�
 
 | 角色 | 活躍時機 | 責任 | 與使用者對話 |
 | --- | --- | --- | --- |
-| Mastermind | 通話之間 | 安排進度、建立／重用 Persona、指派任務與允許事實、決定結束 | 否 |
+| Mastermind | 通話之間 | 安排進度、建立／重用 Persona、指派任務與共享訊息、決定結束 | 否 |
 | Persona | 通話期間 | 維持固定人設，依任務自然互動，可要求掛斷 | 是 |
 | Judge | 回合及通話結束時 | Watch 評估與 StopCall；Recap 客觀回顧 | 否 |
 | Reporter | 整場結束時 | 依逐字稿與 Recap 整理最終回饋及引用 | 否 |
@@ -25,27 +25,26 @@ Role Cast 是通用的多角色文字演練與評估系統。使用者可建立�
 
 - 根據劇本、受測者背景、既有名冊、逐字稿與 Recap 規劃下一通。
 - 可以建立新角色，或使用原 ID 回撥；重用不得改寫人設。
-- Assignment 交付對話目標、允許的固定事實與明確共享的使用者訊息。
-- 固定事實不能憑空新增、改寫或互相矛盾。角色名與個性可虛構。
+- Assignment 交付對話目標與明確共享的使用者訊息。角色名與個性可虛構，但不可牴觸劇本目標。
 - 通話中不插嘴。最終報告交給 Reporter。
 
 ### Persona：對話
 
 - 每通只有一個固定身分，同角色後續通話可保留自己的記憶。
-- 僅接收自身人設、任務、允許事實、共享訊息與自己的歷史。
+- 僅接收自身人設、任務、共享訊息與自己的歷史。
 - 不知道其他角色的私有記憶或評分 prompts；未知細節應表示不確定。
 - 使用者只看到對話，不看到隱藏任務。角色可提出 requestHangup。
 
 ### Judge：判斷與回顧
 
-- Watch 觀察最新使用者訊息與本通逐字稿，依 criteria 和 stopCondition 決定是否停止。
-- 明確引用有效判準與證據才能 StopCall；簡短附和不是能力證據。
+- Watch 觀察最新使用者訊息與本通逐字稿，依 Judge prompt 和 stopCondition 決定是否停止。
+- StopCall 必須明確引用有效訊息證據；簡短附和不是充分證據。
 - 通話結束後產出一次 Recap，記錄事件、透露／拒絕項目、強弱項及不確定處。
 - 不參與編劇，不接收 Mastermind 的 prompts 或任務。
 
 ### Reporter：報告
 
-- 獨立使用 plot 的 Reporter prompt，依目標、判準、所有逐字稿與 Recap 產出報告。
+- 獨立使用 plot 的 Reporter prompt，依目標、所有逐字稿與 Recap 自行整理回饋面向並產出報告。
 - 不接收 Mastermind 的私有指引或角色編劇資料。
 - 判斷需引用實際訊息，區分已展現能力與未知；沒有使用者回答時標示證據不足。
 - 回饋面向可依 plot 調整，例如防詐行動建議、技術面試講評或客服溝通改善。
@@ -60,7 +59,7 @@ sequenceDiagram
     participant J as Judge
     participant R as Reporter
     Note over M,R: 建立 drill，保存 plot 與 prompts 快照
-    M->>P: 建立／重用角色，交付任務及允許事實
+    M->>P: 建立／重用角色，交付任務及共享訊息
     P->>U: 通話開場
     U->>P: 使用者回覆
     U->>J: 同步本通逐字稿
@@ -84,9 +83,9 @@ sequenceDiagram
 - `prompts.judge`：即時判斷與回顧的觀察重點。
 - `prompts.reporter`：最終報告的回饋面向、語氣與改善建議。
 
-這些是角色指引，系統會附加 JSON 輸出契約；自訂 prompt 不會停用格式、證據與身分驗證。Persona 使用系統對話契約，透過 Mastermind 給予的人設與任務適應 plot。
+這些是角色指引，系統會附加 JSON 輸出契約；自訂 prompt 不會停用格式、證據與身分驗證。新增 plot 預填防詐 Mastermind／Judge 指引，作者可直接改寫。Persona 使用系統對話契約，透過 Mastermind 給予的人設與任務適應 plot。
 
-Plot 可匯出／匯入 JSON，匯入先開啟草稿、儲存後建立新 ID。作者可編輯所有本機 plot；本產品尚無多人帳號或權限隔離。
+Plot 可匯出／匯入 JSON，匯入先開啟草稿、儲存後建立新 ID。新版匯出使用 formatVersion 2；舊版匯入會移除已停用的 facts／criteria。作者可編輯自己工作區內的 plot。
 
 ## 5. 演練範例
 

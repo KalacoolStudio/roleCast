@@ -10,7 +10,6 @@ afterEach(async () => {
 const keep = {
   stop: false,
   reason: "需更多資料",
-  criterionIds: [],
   evidenceIds: [],
 };
 async function setup({ agents, provider, limits, voiceFirst = false } = {}) {
@@ -271,7 +270,6 @@ it("manual finish cancels late Judge/assistance results before Recap/report snap
   judge.resolve({
     ...keep,
     stop: true,
-    criterionIds: ["recognition"],
     evidenceIds: [h.store.get(h.id).messages.at(-1).id],
   });
   assist.resolve({ context: "過時指令", requestHangup: true });
