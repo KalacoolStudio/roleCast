@@ -79,6 +79,9 @@ if (process.argv[3] === "unavailable") {
     /"last":true/,
   );
   assert.equal((await reader.read()).done, true);
+  // The app's SSE response advertises keep-alive even when the proxy requests
+  // closure. Reusing that upstream connection after EOF produces HTTP 400.
+  assert.equal((await request("/api/health")).status, 200);
   const abandoned = await request("/events", { signal: controller.signal });
   await abandoned.body.getReader().read();
   controller.abort();
