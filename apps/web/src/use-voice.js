@@ -6,14 +6,17 @@ export function useVoice(id, session, request) {
   const owner = useRef(null);
   const [status, setStatus] = useState({ state: "idle", muted: false });
   const [events, setEvents] = useState([]);
-  const [available, setAvailable] = useState(false);
+  const [availability, setAvailability] = useState("checking");
   useEffect(() => {
     let cancelled = false;
     request("/capabilities")
       .then((v) => {
-        if (!cancelled) setAvailable(v.voice.available);
+        if (!cancelled)
+          setAvailability(v.voice.available ? "available" : "unavailable");
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setAvailability("unavailable");
+      });
     return () => {
       cancelled = true;
     };
@@ -66,7 +69,8 @@ export function useVoice(id, session, request) {
   };
   return {
     ...status,
-    available,
+    available: availability === "available",
+    availability,
     events,
     start,
     stop: () => owner.current?.stop(),

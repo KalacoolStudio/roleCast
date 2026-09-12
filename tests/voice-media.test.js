@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { Resampler, encodePCM, decodePCM } from "../apps/web/src/voice-pcm.js";
 import { VoiceMedia } from "../apps/web/src/voice-media.js";
+import { AdaptiveVad } from "../apps/web/src/voice-vad.js";
 import { deferred } from "./support/fixtures.js";
 const cleanup = [];
 afterEach(() => {
@@ -38,7 +39,7 @@ async function worklet(rate) {
   return instance;
 }
 it.each([24000, 44100, 48000])(
-  "captures continuous %i Hz audio as ordered PCM16LE 24 kHz without microphone monitoring",
+  "captures detected %i Hz speech as ordered PCM16LE 24 kHz without microphone monitoring",
   async (rate) => {
     const processor = await worklet(rate);
     processor.port.onmessage({ data: { type: "active", active: true } });
@@ -67,10 +68,8 @@ it.each([24000, 44100, 48000])(
     for (let i = 0; i < rate / 128; i++)
       processor.process([[signal.slice(0, 128)]], [[new Float32Array(128)]]);
     expect(
-      processor.port.messages.every((m) =>
-        [...new Uint8Array(m.bytes)].every((b) => b === 0),
-      ),
-    ).toBe(true);
+      processor.port.messages.filter((m) => m.type === "audio"),
+    ).toHaveLength(0);
   },
 );
 it("PCM clamps values and encodes signed little-endian samples", () => {
@@ -79,21 +78,36 @@ it("PCM clamps values and encodes signed little-endian samples", () => {
   ]).toEqual([0, 128, 0, 192, 0, 0, 0, 64, 255, 127, 0, 0]);
   expect(() => decodePCM(new ArrayBuffer(3))).toThrow();
 });
-it("a stalled main thread cannot build more than 480 ms of captured audio in the worklet port", async () => {
+it("VAD suppresses steady noise and playback leakage while preserving barge-in", () => {
+  const vad = new AdaptiveVad();
+  const packet = (amplitude) =>
+    Float32Array.from(
+      { length: 960 },
+      (_, i) => amplitude * Math.sin((2 * Math.PI * i) / 80),
+    );
+  expect(
+    Array.from({ length: 20 }, () => vad.push(packet(0.008))).flat(),
+  ).toHaveLength(0);
+  expect(vad.push(packet(0.03), 0.5)).toHaveLength(0);
+  expect(vad.push(packet(0.03), 0.5)).toHaveLength(0);
+  expect(vad.push(packet(0.2), 0.5)).toHaveLength(0);
+  expect(vad.push(packet(0.2), 0.5).length).toBeGreaterThan(0);
+  expect(vad.speaking).toBe(true);
+  for (let i = 0; i < 12; i++) vad.push(packet(0), 0);
+  expect(vad.speaking).toBe(false);
+});
+it("bounds a stalled capture port and resumes without ending the call", async () => {
   const p = await worklet(24000);
   p.port.postMessage = (data) => p.port.messages.push(data);
   p.port.onmessage({ data: { type: "active", active: true } });
   for (let i = 0; i < 300; i++)
-    p.process([[new Float32Array(128)]], [[new Float32Array(128)]]);
+    p.process([[new Float32Array(128).fill(0.4)]], [[new Float32Array(128)]]);
   expect(p.port.messages.filter((m) => m.type === "audio")).toHaveLength(12);
-  expect(p.port.messages.at(-1)).toEqual({
-    type: "error",
-    code: "VOICE_BACKPRESSURE",
-  });
-  expect(p.active).toBe(false);
+  expect(p.port.messages.some((m) => m.type === "error")).toBe(false);
+  expect(p.active).toBe(true);
 });
 it.each([24000, 44100, 48000])(
-  "plays ordered resampled output at %i Hz while capture continues, clears immediately, and rejects overflow",
+  "plays ordered resampled output at %i Hz, clears immediately, and trims stale overflow",
   async (rate) => {
     const p = await worklet(rate);
     p.port.onmessage({ data: { type: "active", active: true } });
@@ -115,19 +129,18 @@ it.each([24000, 44100, 48000])(
     expect(
       Math.max(...output.map((v, i) => Math.abs(v - expected[i]))),
     ).toBeLessThan(0.0001);
-    expect(p.port.messages.some((m) => m.type === "audio")).toBe(true);
+    expect(p.port.messages.some((m) => m.type === "error")).toBe(false);
     p.port.onmessage({ data: { type: "clear" } });
     const clear = new Float32Array(128);
     p.process([[new Float32Array(128)]], [[clear]]);
     expect(clear.every((v) => v === 0)).toBe(true);
     p.port.onmessage({ data: { type: "active", active: true } });
     p.port.onmessage({
-      data: { type: "audio", bytes: encodePCM(new Float32Array(8000)) },
+      data: { type: "audio", bytes: encodePCM(new Float32Array(120000)) },
     });
-    expect(p.port.messages.at(-1)).toEqual({
-      type: "error",
-      code: "VOICE_BACKPRESSURE",
-    });
+    expect(p.active).toBe(true);
+    expect(p.size).toBe(p.queue.length);
+    expect(p.port.messages.at(-1).type).toBe("playback");
   },
 );
 function browser({ permission, moduleFailure, requestFailure } = {}) {
@@ -249,49 +262,66 @@ it("prepares permission/audio before reserving, ignores stale events, and releas
   expect(b.events).toHaveLength(0);
   expect(b.sockets[0].readyState).toBe(3);
 });
-it.each([
-  "permission",
-  "module",
-  "reservation",
-  "suspended",
-  "track-ended",
-  "backpressure",
-])("cleans up partial startup or active audio failure: %s", async (failure) => {
-  const b = browser({
-    permission:
-      failure === "permission"
-        ? () => Promise.reject({ name: "NotAllowedError" })
-        : undefined,
-    moduleFailure: failure === "module",
-    requestFailure: failure === "reservation",
-  });
-  if (["permission", "module"].includes(failure))
-    await expect(b.media.prepare()).rejects.toBeDefined();
-  else {
-    await b.media.prepare();
-    if (failure === "reservation")
-      await expect(b.media.connect("s", "c")).rejects.toThrow();
+it.each(["permission", "module", "reservation", "suspended", "track-ended"])(
+  "cleans up partial startup or active audio failure: %s",
+  async (failure) => {
+    const b = browser({
+      permission:
+        failure === "permission"
+          ? () => Promise.reject({ name: "NotAllowedError" })
+          : undefined,
+      moduleFailure: failure === "module",
+      requestFailure: failure === "reservation",
+    });
+    if (["permission", "module"].includes(failure))
+      await expect(b.media.prepare()).rejects.toBeDefined();
     else {
-      await b.media.connect("s", "c");
-      b.sockets[0].onopen();
-      b.emit({ type: "ready" });
-      if (failure === "suspended") {
-        b.contexts[0].state = "suspended";
-        b.contexts[0].onstatechange();
-      }
-      if (failure === "track-ended") b.track.onended();
-      if (failure === "backpressure") {
-        b.sockets[0].bufferedAmount = 24000;
-        b.ports[0].onmessage({
-          data: { type: "audio", bytes: new ArrayBuffer(1920) },
-        });
+      await b.media.prepare();
+      if (failure === "reservation")
+        await expect(b.media.connect("s", "c")).rejects.toThrow();
+      else {
+        await b.media.connect("s", "c");
+        b.sockets[0].onopen();
+        b.emit({ type: "ready" });
+        if (failure === "suspended") {
+          b.contexts[0].state = "suspended";
+          b.contexts[0].onstatechange();
+        }
+        if (failure === "track-ended") b.track.onended();
       }
     }
-  }
-  expect(b.media.closed).toBe(true);
-  expect(b.contexts[0].state).toBe("closed");
-  expect(b.updates.at(-1).error).toBeTruthy();
-  if (failure !== "permission") expect(b.track.stop).toHaveBeenCalledOnce();
+    expect(b.media.closed).toBe(true);
+    expect(b.contexts[0].state).toBe("closed");
+    expect(b.updates.at(-1).error).toBeTruthy();
+    if (failure !== "permission") expect(b.track.stop).toHaveBeenCalledOnce();
+  },
+);
+it("sheds transient input and output congestion without closing voice", async () => {
+  const b = browser();
+  await b.media.prepare();
+  await b.media.connect("s", "c");
+  b.sockets[0].onopen();
+  b.emit({ type: "ready" });
+  b.sockets[0].bufferedAmount = 192000;
+  b.ports[0].onmessage({
+    data: { type: "audio", bytes: new ArrayBuffer(1920) },
+  });
+  expect(b.media.closed).toBe(false);
+  expect(b.ports[0].postMessage).toHaveBeenCalledWith({
+    type: "capture-gap",
+  });
+  expect(
+    b.sockets[0].sent.filter((v) => v instanceof ArrayBuffer),
+  ).toHaveLength(0);
+  b.sockets[0].bufferedAmount = 0;
+  b.ports[0].onmessage({
+    data: { type: "audio", bytes: new ArrayBuffer(1920) },
+  });
+  expect(
+    b.sockets[0].sent.filter((v) => v instanceof ArrayBuffer),
+  ).toHaveLength(1);
+  b.sockets[0].onmessage({ data: new ArrayBuffer(192001) });
+  expect(b.media.closed).toBe(false);
 });
 it("cancelled permission acquisition stops tracks that arrive later and never reserves a provider", async () => {
   const gate = deferred(),

@@ -18,7 +18,10 @@ test("anti-fraud starts with the prepared chat; playback, attachment and verific
       creates++;
   });
   await page.goto("/");
-  const before = await (await page.request.get("/api/drills")).json();
+  await expect(page.getByRole("button", { name: /開始演練/ })).toBeEnabled();
+  const initialHistory = await page.request.get("/api/drills");
+  expect(initialHistory.ok()).toBe(true);
+  const before = await initialHistory.json();
   await page.getByLabel("讓練習更貼近你").fill("我想練習查證。");
   await page.getByRole("button", { name: /開始演練/ }).click();
   await expect(
@@ -131,7 +134,7 @@ test("mobile reduced-motion chat hands off once, retains background, and exclude
   await expect(page.locator(".marketplace-intro")).toBeVisible();
   await page.unroute("**/api/drills");
   await page.getByRole("button", { name: "申請客服回電" }).click();
-  await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
   expect(creates).toEqual([
     { plotId: "anti-fraud", background },
     { plotId: "anti-fraud", background },
@@ -151,7 +154,6 @@ test("mobile reduced-motion chat hands off once, retains background, and exclude
 
 test("a callback conflict resumes the existing drill and leaving the intro cancels playback", async ({
   page,
-  request,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /開始演練/ }).click();
@@ -161,7 +163,7 @@ test("a callback conflict resumes the existing drill and leaving the intro cance
   await page.getByRole("button", { name: /開始新演練/ }).click();
   await page.getByRole("button", { name: /開始演練/ }).click();
   await page.getByRole("button", { name: "顯示完整對話" }).click();
-  const response = await request.post("/api/drills", {
+  const response = await page.request.post("/api/drills", {
     data: { plotId: "interview", background: "" },
   });
   expect(response.status()).toBe(202);

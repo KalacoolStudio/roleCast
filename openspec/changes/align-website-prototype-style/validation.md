@@ -53,3 +53,7 @@ The proposal, design, tasks, and two capability deltas describe the implemented 
 - `openspec status --change align-website-prototype-style --json`: all four schema artifacts are complete.
 
 All nine tasks are complete. The change remains active and its deltas are already synchronized; archive is a separate follow-up. This reconciliation edited OpenSpec documentation only and reused the implementation/runtime evidence above without rerunning application tests.
+
+## Main integration — 2026-09-12
+
+The later merge of `origin/main` (`b915e04`) into `style` preserves this theme and artwork with main's voice-only controls, browser workspaces, ATM drawer, and deployment-specific disclosures. Active style deltas now describe voice controls and the correct start/storage prerequisites; historical text-era checks above remain the original evidence. Combined validation is recorded in [the introduction change](../add-anti-fraud-chat-intro/validation.md#main-integration--2026-09-12).

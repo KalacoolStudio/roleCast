@@ -9,6 +9,7 @@ import "./style.css";
 import "./home.css";
 import { useVoice } from "./use-voice.js";
 import { Conversation } from "./conversation.jsx";
+import { AtmDrawer } from "./AtmDrawer.jsx";
 
 const labels = {
   planning: "正在安排對話",
@@ -66,8 +67,7 @@ function App() {
     [drill, setDrill] = useState(null);
   const [plotId, setPlotId] = useState("anti-fraud"),
     [background, setBackground] = useState("");
-  const [text, setText] = useState(""),
-    [error, setError] = useState(""),
+  const [error, setError] = useState(""),
     [acting, setActing] = useState(false);
   const [stageEvents, setStageEvents] = useState([]);
   const [stageReset, setStageReset] = useState(0);
@@ -77,6 +77,8 @@ function App() {
   const [managing, setManaging] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [deploymentMode, setDeploymentMode] = useState(null);
+  const [workspaceReady, setWorkspaceReady] = useState(false);
   const voice = useVoice(id, drill, voiceApi);
   const following = useRef(true);
   const [follow, setFollow] = useState(true);
@@ -91,7 +93,6 @@ function App() {
     setId(next);
     location.hash = next;
     setDrill(null);
-    setText("");
     setError("");
     setShowHistory(false);
   }, []);
@@ -111,9 +112,14 @@ function App() {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api("/plots"), loadList()])
-      .then(([available, list]) => {
+    api("/workspace")
+      .then(() => {
+        if (!cancelled) setWorkspaceReady(true);
+        return Promise.all([api("/plots"), loadList(), api("/runtime")]);
+      })
+      .then(([available, list, runtime]) => {
         if (cancelled) return;
+        setDeploymentMode(runtime.deploymentMode);
         setPlots(available);
         if (!selected.current && list.activeId) select(list.activeId);
       })
@@ -125,7 +131,7 @@ function App() {
     };
   }, [loadList, select]);
   useEffect(() => {
-    if (!id) return;
+    if (!id || !workspaceReady) return;
     const connection = connectDrill({
       id,
       getSnapshot: () => api(`/drills/${id}`),
@@ -154,7 +160,7 @@ function App() {
       connection.close();
       if (feed.current === connection) feed.current = null;
     };
-  }, [id, loadList]);
+  }, [id, loadList, workspaceReady]);
   useEffect(() => {
     if (following.current && drill?.state === "in_call")
       transcript.current?.scrollTo({ top: transcript.current.scrollHeight });
@@ -197,41 +203,16 @@ function App() {
       }
       return call.id;
     });
-  const send = (event) => {
-    event.preventDefault();
-    if (!text.trim() || !call || voiceMode) return;
-    action(async () => {
-      const key = "role-cast-pending";
-      let pending;
-      try {
-        pending = JSON.parse(sessionStorage.getItem(key));
-      } catch {
-        /* no pending message */
-      }
-      if (
-        !pending ||
-        (pending.drillId ?? pending.sessionId) !== id ||
-        pending.callId !== call.id ||
-        pending.text !== text
-      )
-        pending = {
-          drillId: id,
-          callId: call.id,
-          text,
-          clientMessageId: crypto.randomUUID(),
-        };
-      sessionStorage.setItem(key, JSON.stringify(pending));
-      await api(`/drills/${id}/calls/${call.id}/messages`, {
-        text: pending.text,
-        clientMessageId: pending.clientMessageId,
-      });
-      sessionStorage.removeItem(key);
-      setText("");
-      await refresh(id);
-    });
+  const atmAction = async (payload) => {
+    const result = await api(`/drills/${id}/calls/${call.id}/atm`, payload);
+    await refresh(id);
+    return result;
   };
   const retry = () =>
     action(async () => {
+      await api("/workspace");
+      setWorkspaceReady(true);
+      setDeploymentMode((await api("/runtime")).deploymentMode);
       setPlots(await api("/plots"));
       await loadList();
       if (id) await refresh(id);
@@ -306,7 +287,12 @@ function App() {
           )}
         </div>
         <div className="sidebar-foot">
-          <span className="live-dot" /> 本機工作空間
+          <span className="live-dot" />
+          {deploymentMode === "gcp"
+            ? "雲端私人工作區"
+            : deploymentMode === "local"
+              ? "本機工作空間"
+              : "正在連線…"}
           <small>對話演練 · 0.1</small>
         </div>
       </aside>
@@ -366,6 +352,8 @@ function App() {
             acting={acting}
             activeId={activeId}
             onResume={select}
+            deploymentMode={deploymentMode}
+            voiceAvailability={voice.availability}
           />
         ) : !drill ? (
           <div className="loading" role="status">
@@ -418,22 +406,11 @@ function App() {
                       <p>{drill.pendingCall.persona.role}</p>
                     </div>
                     <button
-                      className="primary"
-                      disabled={acting || voice.active}
-                      onClick={() =>
-                        command("/calls/accept", {
-                          assignmentId: drill.pendingCall.assignmentId,
-                        })
-                      }
-                    >
-                      接通對話 ↗
-                    </button>
-                    <button
-                      className="voice-start"
+                      className="primary voice-start"
                       disabled={acting || voice.active || !voice.available}
                       onClick={startVoice}
                     >
-                      用語音接通
+                      用語音接通 ↗
                     </button>
                   </section>
                 )}
@@ -516,10 +493,10 @@ function App() {
                               ? "麥克風已靜音"
                               : "語音已連線，直接說話即可"
                             : call?.inputMode === "voice"
-                              ? "語音正在其他頁面使用或正在結束…"
+                              ? "語音正在結束，請稍候…"
                               : voice.available
-                                ? "開啟語音後，直接說話即可自動回覆。"
-                                : "語音尚未設定，可繼續使用文字。"}
+                                ? "重新開啟語音後即可繼續通話。"
+                                : "語音尚未設定，請重新啟動服務。"}
                     </div>
                     {voice.state === "active" && (
                       <span className="voice-playback">
@@ -537,7 +514,6 @@ function App() {
                         >
                           {voice.muted ? "取消靜音" : "麥克風靜音"}
                         </button>
-                        <button onClick={voice.stop}>改用文字</button>
                       </div>
                     ) : (
                       drill.state === "in_call" && (
@@ -553,41 +529,25 @@ function App() {
                         >
                           {voice.error?.startsWith("音訊播放")
                             ? "啟用聲音"
-                            : "開啟語音"}
+                            : voice.error
+                              ? "重新開啟語音"
+                              : "開啟語音"}
                         </button>
                       )
                     )}
                     <small>
-                      語音會傳送至 OpenAI；本機僅保存逐字稿。每通累計{" "}
-                      {drill.plot.maxVoiceSecondsPerCall ?? 180}{" "}
+                      語音會傳送至 OpenAI；
+                      {deploymentMode === "gcp"
+                        ? "逐字稿保存在 GCP 私人工作區。"
+                        : deploymentMode === "local"
+                          ? "本機僅保存逐字稿。"
+                          : "逐字稿儲存位置確認中。"}
+                      每通累計{" "}
+                      {Math.min(drill.plot.maxVoiceSecondsPerCall ?? 600, 600)}{" "}
                       秒，靜音也計時。可隨時插話或掛斷，建議戴耳機。
                       逐字稿可能不完整，播放狀態不代表整句已聽完。
                     </small>
                   </div>
-                )}
-                {drill.state === "in_call" && (
-                  <form className="composer" onSubmit={send}>
-                    <label className="sr-only" htmlFor="message">
-                      你的回覆
-                    </label>
-                    <textarea
-                      id="message"
-                      placeholder="寫下你的回覆…"
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      disabled={acting || drill.busy || voiceMode}
-                      maxLength={4000}
-                    />
-                    <button
-                      className="primary"
-                      type="submit"
-                      disabled={
-                        acting || drill.busy || voiceMode || !text.trim()
-                      }
-                    >
-                      送出 ↑
-                    </button>
-                  </form>
                 )}
                 {!finished(drill.state) && (
                   <div className="call-controls">
@@ -660,6 +620,12 @@ function App() {
                 </button>
               </section>
             )}
+            <AtmDrawer
+              drill={drill}
+              call={call}
+              enabled={voice.state === "active"}
+              onAction={atmAction}
+            />
           </div>
         )}
         <footer>

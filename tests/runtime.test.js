@@ -49,7 +49,10 @@ it("validates settings and env priority without revealing values; setup preserve
 });
 it("API validates inputs, exposes only public snapshots, and has idempotent commands", async () => {
   const h = harness();
-  const app = await createApp(h.engine, { webRoot: "/nonexistent" });
+  const app = await createApp(h.engine, {
+    webRoot: "/nonexistent",
+    testWorkspaceToken: "runtime-test",
+  });
   cleanup.push(() => app.close());
   expect((await app.inject("/api/health")).json()).toEqual({ status: "ok" });
   expect((await app.inject("/api/plots")).body).not.toContain("stopCondition");
@@ -163,6 +166,7 @@ it("shared API_KEY enables public voice capability without exposing credentials 
   const h = harness();
   const app = await createApp(h.engine, {
     webRoot: "/nonexistent",
+    testWorkspaceToken: "runtime-test",
     voice: liveConfiguration({
       API_KEY: "SHARED_KEY_SENTINEL",
       OPENAI_API_KEY: "OBSOLETE_KEY_SENTINEL",
@@ -178,7 +182,10 @@ it("shared API_KEY enables public voice capability without exposing credentials 
 });
 it("shutdown makes pending work unable to touch a closed database", async () => {
   const h = harness();
-  const app = await createApp(h.engine, { webRoot: "/nonexistent" });
+  const app = await createApp(h.engine, {
+    webRoot: "/nonexistent",
+    testWorkspaceToken: "runtime-test",
+  });
   const { id } = await ready(h);
   h.engine.finish(id);
   await app.close();
@@ -191,7 +198,10 @@ it("serves tunnel assets and API commands while rejecting unrelated origins", as
   writeFileSync(join(webRoot, "app.js"), "console.log('ready');");
   writeFileSync(join(webRoot, "app.css"), "body { color: black; }");
   const h = harness();
-  const app = await createApp(h.engine, { webRoot });
+  const app = await createApp(h.engine, {
+    webRoot,
+    testWorkspaceToken: "runtime-test",
+  });
   cleanup.push(() => app.close());
   const host = "role-cast.ngrok-free.app";
   const headers = {

@@ -21,6 +21,7 @@ const definition = () => plotDefinition(builtInPlots[0]);
 
 it("validates authoring and portable JSON without accepting incomplete, conflicting or oversized data", () => {
   const good = definition();
+  expect(good.maxVoiceSecondsPerCall).toBe(600);
   expect(importPlot(exportPlot(builtInPlots[0]))).toEqual(good);
   for (const invalid of [
     { ...good, name: " " },
@@ -32,6 +33,7 @@ it("validates authoring and portable JSON without accepting incomplete, conflict
     { ...good, criteria: [] },
     { ...good, maxCalls: 4 },
     { ...good, maxUserTurnsPerCall: 13 },
+    { ...good, maxVoiceSecondsPerCall: 601 },
     {
       ...good,
       facts: Array.from({ length: 31 }, (_, i) => ({
@@ -192,7 +194,7 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
     store.close();
   });
   store.recover();
-  expect(store.db.pragma("user_version", { simple: true })).toBe(4);
+  expect(store.db.pragma("user_version", { simple: true })).toBe(5);
   expect(store.get(id).prompts).toEqual(completed.prompts);
   expect(store.get(id).messages).toEqual(completed.messages);
   expect(store.get(id).report).toEqual(completed.report);
@@ -203,7 +205,10 @@ it("migrates v1 history and active snapshots without rewriting prompts, messages
 
 it("supports canonical authoring/drill APIs and legacy lifecycle without leaking prompts in public views", async () => {
   const h = harness();
-  const app = await createApp(h.engine, { webRoot: "/missing" });
+  const app = await createApp(h.engine, {
+    webRoot: "/missing",
+    testWorkspaceToken: "plots-test",
+  });
   cleanups.push(() => app.close());
   const before = h.store.listPlots().length;
   expect(

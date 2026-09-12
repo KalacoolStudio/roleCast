@@ -2,17 +2,17 @@
 
 ## Purpose
 
-讓使用者在文字或語音演練中透過角色站位與動作理解 Mastermind、Judge 與 Persona 的分工與交接，並在快速狀態切換、重新整理、行動裝置與減少動畫模式下，維持操作及演練進度的一致性。
+讓使用者在語音演練中透過角色站位與動作理解 Mastermind、Judge 與 Persona 的分工與交接，並在快速狀態切換、重新整理、行動裝置與減少動畫模式下，維持操作及演練進度的一致性。
 
 ## Requirements
 
 ### Requirement: Stage and conversation workspace
 
-演練頁 SHALL 同時提供角色舞台、當前狀態、Persona 身分、逐字稿及既有通話控制。舞台 SHALL 使用隨專案提供的辦公室插圖背景及可辨識的入口、候場、通話、工作與回報位置，並與共用介面維持一致的暖色面板、文字及重點色；桌面並排顯示舞台與對話，窄螢幕上下排列，且 SHALL 不產生水平溢出或遮蔽輸入控制。
+演練頁 SHALL 同時提供角色舞台、當前狀態、Persona 身分、逐字稿及既有通話控制。舞台 SHALL 使用隨專案提供的辦公室插圖背景及可辨識的入口、候場、通話、工作與回報位置，並與共用介面維持一致的暖色面板、文字及重點色；桌面並排顯示舞台與對話，窄螢幕上下排列，且 SHALL 不產生水平溢出或遮蔽通話控制。
 
 #### Scenario: Desktop and mobile exercise
 - **WHEN** 使用者於桌面或 390px 寬手機開啟進行中的 drill
-- **THEN** 使用者可辨識角色位置與當前狀態，讀取逐字稿並操作接通、送出、掛斷及結束整場；手機輸入時仍可看見精簡的角色狀態
+- **THEN** 使用者可辨識角色位置與當前狀態，讀取逐字稿並操作語音接通、靜音、掛斷及結束整場；手機上仍可看見角色狀態並操作語音控制
 
 ### Requirement: Planning and persona arrival
 
@@ -28,7 +28,7 @@
 
 ### Requirement: Stable character identity
 
-Mastermind SHALL 使用老闆素材，Judge SHALL 使用秘書素材；每個 Persona SHALL 在該 drill 中具有穩定的職員外觀與可見姓名。同一 Persona 再次被指派 SHALL 保留身分、外觀及既有記憶行為，並標示再次上場。舞台 SHALL 同時最多顯示這三種當前角色。
+Mastermind SHALL 使用老闆素材，Judge SHALL 使用秘書素材；每個 Persona SHALL 在該 drill 中具有穩定的職員外觀、可見姓名及聲音。同一 Persona 再次被指派 SHALL 保留身分、外觀、聲音及既有記憶行為，並標示再次上場。新 drill SHALL 建立獨立角色名冊。舞台 SHALL 同時最多顯示這三種當前角色。
 
 #### Scenario: Returning persona after refresh
 - **WHEN** Mastermind 重用曾通話的 Persona，且使用者重新整理頁面
@@ -96,4 +96,4 @@ Mastermind SHALL 使用老闆素材，Judge SHALL 使用秘書素材；每個 Pe
 
 #### Scenario: Reduced motion and keyboard use
 - **WHEN** 使用者偏好減少動態效果或啟用減少動畫，並以鍵盤完成演練
-- **THEN** 不播放移動與循環步行，仍可辨識角色分工並完成接通、送出、掛斷及查看報告
+- **THEN** 不播放移動與循環步行，仍可辨識角色分工並完成語音接通、靜音、掛斷及查看報告

@@ -39,6 +39,8 @@ export function Home({
   acting,
   activeId,
   onResume,
+  deploymentMode,
+  voiceAvailability,
 }) {
   const plot = plots.find((value) => value.id === plotId);
   const scene = scenes[plotId] || customScene;
@@ -130,23 +132,43 @@ export function Home({
         </div>
         <div className="scenario-meta">
           <span>多角色動態登場</span>
-          <span>文字 / 語音互動</span>
+          <span>即時語音互動</span>
         </div>
         <button
           className="primary start-button"
           onClick={onStart}
-          disabled={acting || !plot || !!activeId}
+          disabled={
+            acting ||
+            !plot ||
+            !deploymentMode ||
+            !!activeId ||
+            voiceAvailability !== "available"
+          }
         >
-          {acting ? "正在開始…" : "開始演練"}
+          {voiceAvailability === "checking"
+            ? "正在檢查語音…"
+            : acting
+              ? "正在開始…"
+              : "開始演練"}
           <span aria-hidden="true">↗</span>
         </button>
+        {voiceAvailability === "unavailable" && (
+          <p className="hint" role="status">
+            語音尚未設定，請在 .env 設定 API_KEY 並重新啟動服務。
+          </p>
+        )}
         {activeId && (
           <button className="resume-link" onClick={() => onResume(activeId)}>
             繼續目前演練 →
           </button>
         )}
         <p className="privacy">
-          紀錄保存在本機。演練內容會送至你設定的外部 LLM API 進行推論。
+          {deploymentMode === "gcp"
+            ? "紀錄保存在 GCP，並與其他瀏覽器工作區隔離。"
+            : deploymentMode === "local"
+              ? "紀錄保存在本機。"
+              : "正在確認紀錄儲存位置。"}
+          演練內容會送至你設定的外部 LLM API 進行推論。
         </p>
       </section>
 

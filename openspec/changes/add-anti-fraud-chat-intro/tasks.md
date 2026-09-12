@@ -10,4 +10,4 @@
 
 ## 3. Main-branch integration
 
-- [ ] 3.1 Merge current main into style, preserving both the prepared chat/style and incoming voice-only calls, workspaces, ATM, and deployment behavior; reconcile code/tests and OpenSpec contracts, then verify build, unit/integration/browser tests, lint/format, strict specs, and clean diff checks before recording merge validation.
+- [x] 3.1 Merge current main into style, preserving both the prepared chat/style and incoming voice-only calls, workspaces, ATM, and deployment behavior; reconcile code/tests and OpenSpec contracts, then verify build, unit/integration/browser tests, lint/format, strict specs, and clean diff checks before recording merge validation.

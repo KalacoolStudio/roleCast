@@ -187,12 +187,6 @@ export function DrillStage({ drill, events, resetKey, connection }) {
           減少動畫
         </label>
       </div>
-      <div className="stage-compact-summary">
-        {drill.pendingCall?.persona.name ||
-          drill.calls.find((c) => c.id === drill.currentCallId)?.persona.name ||
-          "角色待命"}{" "}
-        · {drill.busy ? "正在回覆…" : "對話進行中"} · Judge 監看中
-      </div>
       <div className="stage-canvas" data-phase={scene.phase}>
         <div className="stage-map">
           <span className="stage-location stage-boss-desk">調度區</span>

@@ -18,7 +18,7 @@
 - **THEN** 啟動檢查列出缺少或無效的設定名稱並以失敗退出，不顯示設定中的秘密值
 
 ### Requirement: Secret isolation and clear data handling
-API 金鑰 SHALL 只在後端使用，不進入瀏覽器資產、API 回應、資料庫或日誌。專案 SHALL 提供不含真實金鑰的 `.env.example`，忽略實際 `.env` 與本機資料目錄；setup SHALL 不覆寫既有 `.env`。README 與開始演練介面 SHALL 說明紀錄保存在本機，但推論內容送至設定的外部 API，不宣稱離線或資料完全不出機。
+API 金鑰 SHALL 只在後端使用，不進入瀏覽器資產、API 回應、資料庫或日誌。專案 SHALL 提供不含真實金鑰的 `.env.example`，忽略實際 `.env` 與本機資料目錄；setup SHALL 不覆寫既有 `.env`。README 與開始演練介面 SHALL 依執行模式說明紀錄保存位置：本機模式保存在本機；GCP 模式保存在雲端持久磁碟並與其他瀏覽器工作區隔離。兩種模式 SHALL 說明推論內容送至設定的外部 API，不宣稱離線或資料完全不出機。
 
 #### Scenario: Existing key file
 - **WHEN** 使用者已有 `.env` 並重跑 setup
@@ -28,12 +28,27 @@ API 金鑰 SHALL 只在後端使用，不進入瀏覽器資產、API 回應、�
 - **WHEN** 模型 API 回傳驗證錯誤
 - **THEN** 使用者看到經整理的錯誤種類，回應與日誌均不含 API key 或原始授權標頭
 
+#### Scenario: Storage disclosure follows deployment mode
+- **WHEN** 使用者在本機或 GCP 模式開啟開始演練介面
+- **THEN** 介面顯示該模式的保存位置與工作區隔離範圍，並保留外部模型推論提示
+
 ### Requirement: Durable local records
 系統 SHALL 在本機保存劇本定義、演練快照、角色、指派、已接受訊息、結束原因、Judge 結果、舞台事件、語音逐字證據及最終報告。已確認接受的訊息 SHALL 在程序重啟後仍可讀取。程序重啟時尚未終止的演練 SHALL 標為中斷並保持可讀，不自動重送模型請求或宣稱續接成功。舊版文字、劇本、舞台或語音資料庫 SHALL 以單一交易遷移至相容的合併結構，失敗時不留下半完成遷移；既有 ID、提示、逐字稿、報告及事件順序不得遺失。
 
 #### Scenario: Process restarts mid call
 - **WHEN** 程序在通話期間停止並重新啟動
 - **THEN** 舊演練顯示中斷與既有紀錄，使用者可開始新演練，不自動接續舊通話
+
+### Requirement: Browser workspace isolation
+系統 SHALL 為每個瀏覽器建立不可猜測且禁止 JavaScript 讀取的持久工作區憑證。後端 SHALL 依工作區限制劇本、演練、報告、舞台事件與語音操作；知道其他工作區的資源 ID 不得授予讀取或修改權限。每個工作區 SHALL 有自己的內建劇本副本與進行中演練限制。既有未分區資料升級時 SHALL 完整歸入第一個接手的工作區，不得遺失。
+
+#### Scenario: Concurrent independent users
+- **WHEN** 兩個沒有共用 Cookie 的瀏覽器同時建立及操作演練
+- **THEN** 兩者各自看到自己的劇本、歷史與 active drill，且其中一方不能讀取、掛斷或結束另一方的演練
+
+#### Scenario: Resume browser workspace
+- **WHEN** 同一瀏覽器帶著既有工作區 Cookie 再次開啟服務
+- **THEN** 系統恢復該工作區資料，且不在 API 或前端 JavaScript 中揭露工作區憑證
 
 ### Requirement: Bounded failures and validated model results
 所有模型請求 SHALL 有逾時及有限次重試。格式錯誤、無效角色 ID、無效證據引用或矛盾固定事實 SHALL 在更新狀態前被拒絕。無法完成的規劃、回合、回顧或報告 SHALL 將演練標為失敗並保留已保存資料；不得以假回覆或假報告替代。已取消的通話請求 SHALL 不被重試。

@@ -12,10 +12,14 @@ import { builtInPlots as defaults } from "./plots.js";
 import { publicPlot } from "./plot-contracts.js";
 
 const now = () => new Date().toISOString();
+const defaultWorkspaceId = "default";
+const initialAtmBalance = 100000;
+const amountText = (amount) => `NT$${amount.toLocaleString("en-US")}`;
 export class Engine {
   constructor(store, agents, plots = defaults) {
     this.store = store;
     this.agents = agents;
+    this.plots = plots;
     this.store.seedPlots(plots);
     this.jobs = new Map();
     this.pending = new Set();
@@ -24,7 +28,7 @@ export class Engine {
   }
   current(token) {
     if (this.disposed) return null;
-    const s = this.store.get(token.id);
+    const s = this.store.get(token.id, token.ownerId);
     return s.version === token.version && !terminal(s.state) ? s : null;
   }
   launch(s, state, work) {
@@ -35,6 +39,7 @@ export class Engine {
     this.store.save(s);
     const token = {
       id: s.id,
+      ownerId: s.ownerId,
       version: s.version,
       controller: new AbortController(),
     };
@@ -47,7 +52,7 @@ export class Engine {
         const latest = this.current(token);
         if (!latest) return;
         token.controller.abort();
-        this.fail(latest.id, error);
+        this.fail(latest.id, error, latest.ownerId);
       })
       .finally(() => {
         this.pending.delete(promise);
@@ -65,10 +70,14 @@ export class Engine {
     );
     return validateResult(kind, result, context);
   }
-  start(plotId, background = "") {
-    const plot = this.store.getPlot(plotId);
+  ensureWorkspace(ownerId) {
+    this.store.seedPlots(this.plots, ownerId);
+  }
+  start(plotId, background = "", ownerId = defaultWorkspaceId) {
+    const plot = this.store.getPlot(plotId, ownerId);
     const s = {
       id: randomUUID(),
+      ownerId,
       state: "planning",
       version: 0,
       createdAt: now(),
@@ -88,6 +97,7 @@ export class Engine {
       watches: [],
       recaps: [],
       report: null,
+      atm: { balance: initialAtmBalance },
     };
     this.store.create(s);
     this.plan(s);
@@ -126,9 +136,9 @@ export class Engine {
       this.store.save(latest);
     });
   }
-  accept(id, assignmentId, mode = "text") {
+  accept(id, assignmentId, mode = "text", ownerId = defaultWorkspaceId) {
     if (!["text", "voice"].includes(mode)) throw conflict();
-    const s = this.store.get(id);
+    const s = this.store.get(id, ownerId);
     const previous = s.calls.find((c) => c.assignmentId === assignmentId);
     if (previous) return previous.id;
     if (s.state !== "awaiting_call" || s.pendingAssignmentId !== assignmentId)
@@ -152,7 +162,7 @@ export class Engine {
       s.busy = false;
       s.version++;
       this.store.save(s);
-      this.media?.awaitOwner(id, call.id);
+      this.media?.awaitOwner(id, call.id, ownerId);
     } else this.openText(s, call);
     return call.id;
   }
@@ -165,12 +175,13 @@ export class Engine {
       this.addReply(latest, call.id, reply.text);
       latest.busy = false;
       this.store.save(latest);
-      if (reply.requestHangup) this.closeCall(s.id, call.id, "persona");
+      if (reply.requestHangup)
+        this.closeCall(s.id, call.id, "persona", s.ownerId);
     });
   }
-  returnToText(id, callId) {
+  returnToText(id, callId, ownerId = defaultWorkspaceId) {
     if (this.disposed) return;
-    const s = this.store.get(id);
+    const s = this.store.get(id, ownerId);
     const call = s.calls.find((c) => c.id === callId);
     if (
       !call ||
@@ -187,12 +198,12 @@ export class Engine {
     )
       this.openText(s, call);
   }
-  fail(id, error) {
+  fail(id, error, ownerId = defaultWorkspaceId) {
     if (this.disposed) return;
-    let s = this.store.get(id);
+    let s = this.store.get(id, ownerId);
     if (terminal(s.state)) return;
-    this.media?.seal(id, s.currentCallId);
-    s = this.store.get(id);
+    this.media?.seal(id, s.currentCallId, ownerId);
+    s = this.store.get(id, ownerId);
     this.jobs.get(id)?.controller.abort();
     s.state = "failed";
     s.version++;
@@ -209,7 +220,7 @@ export class Engine {
       call.endedAt = now();
     }
     this.store.save(s);
-    this.media?.callEnded(id, s.currentCallId);
+    this.media?.callEnded(id, s.currentCallId, ownerId);
   }
   addReply(s, callId, text) {
     s.messages.push({
@@ -221,8 +232,8 @@ export class Engine {
       createdAt: now(),
     });
   }
-  send(id, callId, clientMessageId, text) {
-    const s = this.store.get(id);
+  send(id, callId, clientMessageId, text, ownerId = defaultWorkspaceId) {
+    const s = this.store.get(id, ownerId);
     text = inputText(text, 4000);
     clientMessageId = inputText(clientMessageId, 100);
     const previous = s.messages.find(
@@ -266,7 +277,7 @@ export class Engine {
       });
       this.store.save(latest);
       if (watch.stop) {
-        this.closeCall(id, callId, "judge");
+        this.closeCall(id, callId, "judge", ownerId);
         return;
       }
       const reply = await replyPromise;
@@ -277,25 +288,110 @@ export class Engine {
       this.store.save(latest);
       const turnCount = latest.messages.filter(
         (m) =>
-          m.callId === callId && m.speaker === "user" && m.source !== "voice",
+          m.callId === callId &&
+          m.speaker === "user" &&
+          !["voice", "atm"].includes(m.source),
       ).length;
       if (reply.requestHangup || turnCount >= latest.plot.maxUserTurnsPerCall)
         this.closeCall(
           id,
           callId,
           reply.requestHangup ? "persona" : "turn_limit",
+          ownerId,
         );
     });
     return message.id;
   }
-  closeCall(id, callId, reason = "user") {
-    let s = this.store.get(id);
+  atmAction(
+    id,
+    callId,
+    clientActionId,
+    action,
+    amount,
+    recipient,
+    ownerId = defaultWorkspaceId,
+  ) {
+    clientActionId = inputText(clientActionId, 100);
+    if (!["transfer", "withdraw"].includes(action))
+      throw new AppError("INVALID_INPUT", "ATM 操作不正確。", 400);
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 10000000)
+      throw new AppError(
+        "INVALID_INPUT",
+        "ATM 金額需為 1 至 10,000,000 的整數。",
+        400,
+      );
+    let recipientLast4 = null;
+    if (action === "transfer") {
+      recipient = inputText(recipient, 64).replace(/[ -]/g, "");
+      if (!/^\d{4,32}$/.test(recipient))
+        throw new AppError("INVALID_INPUT", "收款帳號格式不正確。", 400);
+      recipientLast4 = recipient.slice(-4);
+    }
+    const s = this.store.get(id, ownerId);
+    const previous = s.messages.find(
+      (message) => message.clientMessageId === clientActionId,
+    );
+    if (previous) {
+      if (
+        previous.source !== "atm" ||
+        previous.callId !== callId ||
+        previous.action !== action ||
+        previous.amount !== amount ||
+        previous.recipientLast4 !== recipientLast4
+      )
+        throw conflict();
+      return { messageId: previous.id, balance: previous.balanceAfter };
+    }
+    const call = s.calls.find((candidate) => candidate.id === callId);
+    if (
+      !call ||
+      call.endedAt ||
+      s.state !== "in_call" ||
+      s.currentCallId !== callId
+    )
+      throw conflict();
+    const balance = Number.isSafeInteger(s.atm?.balance)
+      ? s.atm.balance
+      : initialAtmBalance;
+    if (amount > balance)
+      throw new AppError(
+        "INSUFFICIENT_FUNDS",
+        "餘額不足，請調整操作金額。",
+        409,
+      );
+    const balanceAfter = balance - amount;
+    const text =
+      action === "transfer"
+        ? `【ATM 操作】使用者已匯款 ${amountText(amount)} 至收款帳號末四碼 ${recipientLast4}；操作後餘額 ${amountText(balanceAfter)}。`
+        : `【ATM 操作】使用者已提款 ${amountText(amount)}；操作後餘額 ${amountText(balanceAfter)}。`;
+    const message = {
+      id: randomUUID(),
+      callId,
+      clientMessageId: clientActionId,
+      speaker: "user",
+      source: "atm",
+      action,
+      amount,
+      recipientLast4,
+      balanceAfter,
+      text,
+      sequence: s.messages.length + 1,
+      createdAt: now(),
+    };
+    s.atm = { balance: balanceAfter };
+    s.messages.push(message);
+    this.store.save(s);
+    this.media?.observeUserMessage(id, callId, message, ownerId);
+    return { messageId: message.id, balance: balanceAfter };
+  }
+  closeCall(id, callId, reason = "user", ownerId = defaultWorkspaceId) {
+    let s = this.store.get(id, ownerId);
     let call = s.calls.find((c) => c.id === callId);
     if (!call) throw missing();
     if (call.endedAt) return;
     if (s.currentCallId !== callId || s.state !== "in_call") throw conflict();
-    this.media?.seal(id, callId);
-    s = this.store.get(id);
+    this.media?.seal(id, callId, ownerId);
+    s = this.store.get(id, ownerId);
     call = s.calls.find((c) => c.id === callId);
     call.endedAt = now();
     call.endReason = reason;
@@ -308,15 +404,15 @@ export class Engine {
       this.store.save(latest);
       this.plan(latest);
     });
-    this.media?.callEnded(id, callId);
+    this.media?.callEnded(id, callId, ownerId);
   }
-  finish(id) {
-    const s = this.store.get(id);
+  finish(id, ownerId = defaultWorkspaceId) {
+    const s = this.store.get(id, ownerId);
     if (terminal(s.state) || s.state === "reporting") return;
     s.finishRequested = true;
     this.store.save(s);
     if (s.state === "in_call")
-      this.closeCall(id, s.currentCallId, "user_finish");
+      this.closeCall(id, s.currentCallId, "user_finish", ownerId);
     else if (s.state !== "recapping") this.report(s);
   }
   report(s) {
@@ -333,8 +429,8 @@ export class Engine {
       this.store.save(latest);
     });
   }
-  view(id) {
-    const s = this.store.get(id);
+  view(id, ownerId = defaultWorkspaceId) {
+    const s = this.store.get(id, ownerId);
     const a = s.assignments.find((v) => v.id === s.pendingAssignmentId);
     const persona = (pid) => {
       const p = s.personas.find((v) => v.id === pid);
@@ -353,6 +449,32 @@ export class Engine {
         ? { assignmentId: a.id, persona: persona(a.personaId) }
         : null,
       currentCallId: s.currentCallId,
+      atm: {
+        balance: Number.isSafeInteger(s.atm?.balance)
+          ? s.atm.balance
+          : initialAtmBalance,
+        transactions: s.messages
+          .filter((message) => message.source === "atm")
+          .map(
+            ({
+              id,
+              callId,
+              action,
+              amount,
+              recipientLast4,
+              balanceAfter,
+              createdAt,
+            }) => ({
+              id,
+              callId,
+              action,
+              amount,
+              recipientLast4,
+              balanceAfter,
+              createdAt,
+            }),
+          ),
+      },
       calls: s.calls.map((c) => ({
         id: c.id,
         ordinal: c.ordinal,
@@ -389,14 +511,22 @@ export class Engine {
               partial,
               playback,
               late,
+              action,
+              amount,
+              recipientLast4,
+              balanceAfter,
             }) => ({
               id,
               speaker,
               text,
               createdAt,
               sequence,
+              ...(source ? { source } : {}),
               ...(source === "voice"
-                ? { source, voiceId, fragmentSpans, partial, playback, late }
+                ? { voiceId, fragmentSpans, partial, playback, late }
+                : {}),
+              ...(source === "atm"
+                ? { action, amount, recipientLast4, balanceAfter }
                 : {}),
             }),
           ),
@@ -404,8 +534,8 @@ export class Engine {
       report: s.report,
     };
   }
-  list() {
-    return this.store.list().map((s) => ({
+  list(ownerId = defaultWorkspaceId) {
+    return this.store.list(ownerId).map((s) => ({
       id: s.id,
       state: s.state,
       createdAt: s.createdAt,

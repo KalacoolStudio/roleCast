@@ -22,7 +22,7 @@ The supplied reference is `anti-fraud-prototype-20260912T060626Z-1-001/anti-frau
 
 ### Shared theme and an extracted home component
 
-`Home.jsx` receives the existing plot selection, background, action state, active drill ID, and callbacks from `main.jsx`. The same handlers still create and resume drills. `CastMark` provides the four-bar CSS mark for the hero and navigation.
+`Home.jsx` receives the existing plot selection, background, action state, active drill ID, and callbacks from `main.jsx`. Main-branch integration also supplies deployment mode and voice availability, retaining the incoming start prerequisites and local/GCP disclosure. The anti-fraud introduction change now precedes that plot's creation callback. `CastMark` provides the four-bar CSS mark for the hero and navigation.
 
 `style.css` defines shared theme variables: accent `#d94825`, background `#f6f5f2`, panel `#fffdf9`, text `#25303a`, muted text `#65717b`, and line `#e4e6e9`. `home.css` owns the illustrated layout; the stage stylesheet uses the shared variables for its surrounding controls and captions. User message bubbles use the reference's teal accent with dark text. The document title and browser theme color follow the new branding.
 
@@ -47,6 +47,8 @@ Referencing the sibling directory would break a separate checkout or deployment.
 Wide screens show the hero above an illustration/picker grid. At 1100px and below the grid becomes a vertical sequence; the existing navigation switches to its mobile presentation at 700px. Desktop scene framing retains the supplied landscape aspect ratio, while narrow screens use a 4:3 crop. The picker remains a list of native buttons so all saved plots remain available, with `aria-pressed` selection and visible keyboard focus. Textarea labels, image alternatives, the history toggle, and the external-inference disclosure are retained.
 
 The reference's dropdown was an alternative; retaining buttons keeps the existing selection interaction and browser coverage. Existing stage responsive and reduced-motion behavior is preserved.
+
+During main-branch integration, voice-only call controls replace the former text composer. Remove obsolete composer/typing-summary styles while retaining the illustrated stage, captions, microphone controls, and incoming ATM drawer. Update active stage scenarios to describe voice controls; original text-era validation remains historical evidence.
 
 ### Reconcile the office-stage specification
 

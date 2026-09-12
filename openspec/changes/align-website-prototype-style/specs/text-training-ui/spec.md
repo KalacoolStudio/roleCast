@@ -22,7 +22,7 @@
 
 #### Scenario: Start or resume deliberately
 - **WHEN** 使用者查看開始演練區
-- **THEN** 僅在已選擇有效劇本、未處理開始操作且沒有進行中的演練時允許開始；已有進行中的演練時提供繼續該場的操作，並保留本機保存與外部 API 推論的資料使用說明
+- **THEN** 僅在已選擇有效劇本、已確認執行模式與語音可用、未處理開始操作且目前工作區沒有進行中的演練時允許開始；已有進行中的演練時提供繼續該場的操作，並依本機或 GCP 模式說明保存位置與工作區隔離範圍，保留外部 API 推論的資料使用說明
 
 ### Requirement: Responsive and accessible scenario home
 

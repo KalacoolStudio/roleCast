@@ -12,7 +12,14 @@ export function cursor(value, fallback = 0) {
 }
 
 // A slow socket gets no application-level backlog: resume reading SQLite on drain.
-export function streamStage(engine, id, after, response, onClose = () => {}) {
+export function streamStage(
+  engine,
+  id,
+  after,
+  response,
+  onClose = () => {},
+  ownerId,
+) {
   let sequence = after,
     revision = -1,
     closed = false,
@@ -42,7 +49,7 @@ export function streamStage(engine, id, after, response, onClose = () => {}) {
     scheduled = undefined;
     if (closed || blocked) return;
     try {
-      const page = engine.store.events(id, sequence, 100);
+      const page = engine.store.events(id, sequence, 100, ownerId);
       for (const event of page.events) {
         sequence = event.sequence;
         if (
@@ -53,7 +60,7 @@ export function streamStage(engine, id, after, response, onClose = () => {}) {
           return armStall();
       }
       if (page.hasMore) return schedule();
-      const snapshot = engine.view(id);
+      const snapshot = engine.view(id, ownerId);
       if (snapshot.stage.revision > revision) {
         revision = snapshot.stage.revision;
         if (!write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`))
@@ -97,11 +104,12 @@ export function registerStageRoutes(app, engine) {
       req.params.id,
       cursor(req.query.after),
       cursor(req.query.limit, 100),
+      req.workspaceId,
     ),
   );
   app.get("/api/drills/:id/events/stream", async (req, reply) => {
     const after = cursor(req.headers["last-event-id"] ?? req.query.after);
-    engine.store.events(req.params.id, after, 1);
+    engine.store.events(req.params.id, after, 1, req.workspaceId);
     reply.hijack();
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
@@ -110,8 +118,13 @@ export function registerStageRoutes(app, engine) {
       Connection: "keep-alive",
     });
     reply.raw.flushHeaders();
-    const stop = streamStage(engine, req.params.id, after, reply.raw, () =>
-      streams.delete(stop),
+    const stop = streamStage(
+      engine,
+      req.params.id,
+      after,
+      reply.raw,
+      () => streams.delete(stop),
+      req.workspaceId,
     );
     streams.add(stop);
   });

@@ -1,6 +1,33 @@
 import { startDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
+
+async function currentDrill(page) {
+  const id = new URL(page.url()).hash.slice(1);
+  return (await page.request.get(`/api/drills/${id}`)).json();
+}
+
+async function acceptThroughApi(page) {
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  const drill = await currentDrill(page);
+  const response = await page.request.post(
+    `/api/drills/${drill.id}/calls/accept`,
+    { data: { assignmentId: drill.pendingCall.assignmentId } },
+  );
+  expect(response.ok()).toBe(true);
+  await expect.poll(async () => (await currentDrill(page)).busy).toBe(false);
+  return (await response.json()).callId;
+}
+
+async function sendThroughApi(page, text) {
+  const drill = await currentDrill(page);
+  const response = await page.request.post(
+    `/api/drills/${drill.id}/calls/${drill.currentCallId}/messages`,
+    { data: { clientMessageId: crypto.randomUUID(), text } },
+  );
+  expect(response.ok()).toBe(true);
+  await expect.poll(async () => (await currentDrill(page)).busy).toBe(false);
+}
 test("desktop and mobile layout; failed and interrupted histories remain readable", async ({
   page,
 }, testInfo) => {
@@ -50,19 +77,14 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
   ).toBeVisible();
   await page.getByLabel("讓練習更貼近你").fill("我想練習查證。");
   await startDrill(page);
-  await page.getByRole("button", { name: /接通對話/ }).click();
-  const input = page.getByLabel("你的回覆");
-  await expect(input).toBeEnabled();
-  await input.fill("好");
-  await page.getByRole("button", { name: /送出/ }).focus();
-  await page.keyboard.press("Enter");
-  await expect(input).toBeDisabled();
+  await acceptThroughApi(page);
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
+  await sendThroughApi(page, "好");
   await expect(page.getByRole("button", { name: "掛斷本通" })).toBeEnabled();
   await page.reload();
-  await expect(page.getByLabel("你的回覆")).toBeEnabled();
+  await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".message.user")).toHaveCount(1);
-  await page.getByLabel("你的回覆").fill("你是詐騙，我要透過官方管道查證");
-  await page.getByRole("button", { name: /送出/ }).click();
+  await sendThroughApi(page, "你是詐騙，我要透過官方管道查證");
   await expect(
     page.getByRole("heading", { name: "這次練習，你帶走了什麼？" }),
   ).toBeVisible();
@@ -84,13 +106,12 @@ test("interview recalls a persona and changes role on a later call; finishes wit
     .click();
   await startDrill(page);
   for (let call = 1; call <= 3; call++) {
-    await page.getByRole("button", { name: /接通對話/ }).click();
-    await expect(page.getByLabel("你的回覆")).toBeEnabled();
-    await page
-      .getByLabel("你的回覆")
-      .fill(`第 ${call} 次回答：先驗證資料，再分批切換與回退。`);
-    await page.getByRole("button", { name: /送出/ }).click();
-    await expect(page.getByLabel("你的回覆")).toBeEnabled();
+    await acceptThroughApi(page);
+    await expect(page.getByLabel("你的回覆")).toHaveCount(0);
+    await sendThroughApi(
+      page,
+      `第 ${call} 次回答：先驗證資料，再分批切換與回退。`,
+    );
     await page.getByRole("button", { name: "掛斷本通" }).click();
   }
   await expect(page.locator(".report")).toBeVisible();
@@ -106,7 +127,7 @@ test("early finish reports insufficient evidence and network recovery works", as
 }) => {
   await page.goto("/");
   await startDrill(page);
-  await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
   await page.route("**/api/drills/*", (route) => route.abort());
   await page.reload();
   await expect(page.getByRole("alert")).toBeVisible();
@@ -189,7 +210,6 @@ test("plot editor copies, edits three prompts, exports/imports and launches an i
 
 test("new plot authoring validates imports and preserves drafts on conflicts", async ({
   page,
-  request,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
@@ -210,14 +230,14 @@ test("new plot authoring validates imports and preserves drafts on conflicts", a
   await page.getByLabel("停止條件").fill("已說明事實並提出下一步。");
   await page.getByRole("button", { name: "儲存劇本", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");
-  const plots = await (await request.get("/api/plots")).json();
+  const plots = await (await page.request.get("/api/plots")).json();
   const plot = await (
-    await request.get(
+    await page.request.get(
       `/api/plots/${plots.find((p) => p.name === "危機溝通").id}`,
     )
   ).json();
   const { id, ...body } = plot;
-  await request.put(`/api/plots/${id}`, {
+  await page.request.put(`/api/plots/${id}`, {
     data: { ...body, name: "其他分頁改過" },
   });
   await page.getByLabel("Reporter prompt").fill("不可遺失的草稿");

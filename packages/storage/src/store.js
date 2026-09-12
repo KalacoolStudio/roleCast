@@ -16,6 +16,8 @@ import {
   plotDefinitionSchema,
 } from "../../core/src/plot-contracts.js";
 
+export const databaseSchemaVersion = 5;
+export const defaultWorkspaceId = "default";
 const collections = [
   "personas",
   "assignments",
@@ -32,7 +34,7 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     const version = this.db.pragma("user_version", { simple: true });
     this.listeners = new Set();
-    if (version > 4) {
+    if (version > databaseSchemaVersion) {
       this.db.close();
       throw new Error("資料庫版本較新，請使用相容的程式。");
     }
@@ -99,7 +101,54 @@ export class Store {
             this.db.pragma("user_version = 3");
           })();
         this.voice = new VoiceRecords(this);
-        this.db.pragma("user_version = 4");
+        if (version < 5)
+          this.db.transaction(() => {
+            this.db.exec(`
+              CREATE TABLE IF NOT EXISTS workspaces (
+                id TEXT PRIMARY KEY,
+                token_hash TEXT UNIQUE,
+                created_at TEXT NOT NULL,
+                claimed_at TEXT
+              );
+            `);
+            this.db
+              .prepare(
+                "INSERT OR IGNORE INTO workspaces(id,token_hash,created_at,claimed_at) VALUES(?,?,?,NULL)",
+              )
+              .run(defaultWorkspaceId, null, new Date().toISOString());
+            const sessionColumns = this.db
+              .prepare("PRAGMA table_info(sessions)")
+              .all()
+              .map((column) => column.name);
+            if (!sessionColumns.includes("owner_id"))
+              this.db.exec(
+                `ALTER TABLE sessions ADD COLUMN owner_id TEXT NOT NULL DEFAULT '${defaultWorkspaceId}'`,
+              );
+            this.db.exec("DROP INDEX IF EXISTS one_active_session");
+            this.db.exec(
+              "CREATE UNIQUE INDEX IF NOT EXISTS one_active_session_per_workspace ON sessions(owner_id) WHERE state NOT IN ('completed','failed','interrupted')",
+            );
+            const plotColumns = this.db
+              .prepare("PRAGMA table_info(plots)")
+              .all()
+              .map((column) => column.name);
+            if (!plotColumns.includes("owner_id")) {
+              this.db.exec(`
+                CREATE TABLE plots_v5 (
+                  owner_id TEXT NOT NULL REFERENCES workspaces(id),
+                  id TEXT NOT NULL,
+                  version INTEGER NOT NULL,
+                  payload TEXT NOT NULL,
+                  PRIMARY KEY(owner_id,id)
+                );
+                INSERT INTO plots_v5(owner_id,id,version,payload)
+                  SELECT '${defaultWorkspaceId}',id,version,payload FROM plots;
+                DROP TABLE plots;
+                ALTER TABLE plots_v5 RENAME TO plots;
+              `);
+            }
+            this.db.pragma("user_version = 5");
+          })();
       })();
     } catch (error) {
       this.db.close();
@@ -110,10 +159,44 @@ export class Store {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-  events(id, after = 0, limit = 100) {
+  claimWorkspace(tokenHash) {
+    return this.db.transaction(() => {
+      const existing = this.db
+        .prepare("SELECT id FROM workspaces WHERE token_hash=?")
+        .get(tokenHash);
+      if (existing) return existing.id;
+      const unclaimed = this.db
+        .prepare(
+          "SELECT id FROM workspaces WHERE token_hash IS NULL ORDER BY rowid LIMIT 1",
+        )
+        .get();
+      if (unclaimed) {
+        this.db
+          .prepare(
+            "UPDATE workspaces SET token_hash=?,claimed_at=? WHERE id=? AND token_hash IS NULL",
+          )
+          .run(tokenHash, new Date().toISOString(), unclaimed.id);
+        return unclaimed.id;
+      }
+      const id = randomUUID();
+      const createdAt = new Date().toISOString();
+      this.db
+        .prepare(
+          "INSERT INTO workspaces(id,token_hash,created_at,claimed_at) VALUES(?,?,?,?)",
+        )
+        .run(id, tokenHash, createdAt, createdAt);
+      return id;
+    })();
+  }
+  workspace(tokenHash) {
+    return this.db
+      .prepare("SELECT id FROM workspaces WHERE token_hash=?")
+      .get(tokenHash)?.id;
+  }
+  events(id, after = 0, limit = 100, ownerId = defaultWorkspaceId) {
     const row = this.db
-      .prepare("SELECT payload FROM sessions WHERE id=?")
-      .get(id);
+      .prepare("SELECT payload FROM sessions WHERE id=? AND owner_id=?")
+      .get(id, ownerId);
     if (!row) throw missing();
     if (
       !Number.isSafeInteger(after) ||
@@ -141,44 +224,50 @@ export class Store {
       latestSequence,
     };
   }
-  seedPlots(plots) {
+  seedPlots(plots, ownerId = defaultWorkspaceId) {
     this.db.transaction(() => {
       for (const input of plots) {
         const plot = parsePlot(input, plotSchema);
         this.db
-          .prepare("INSERT INTO plots VALUES(?,?,?) ON CONFLICT(id) DO NOTHING")
-          .run(plot.id, plot.version, JSON.stringify(plot));
+          .prepare(
+            "INSERT INTO plots(owner_id,id,version,payload) VALUES(?,?,?,?) ON CONFLICT(owner_id,id) DO NOTHING",
+          )
+          .run(ownerId, plot.id, plot.version, JSON.stringify(plot));
       }
     })();
   }
-  listPlots() {
+  listPlots(ownerId = defaultWorkspaceId) {
     return this.db
-      .prepare("SELECT payload FROM plots ORDER BY rowid")
-      .all()
+      .prepare("SELECT payload FROM plots WHERE owner_id=? ORDER BY rowid")
+      .all(ownerId)
       .map(({ payload }) => JSON.parse(payload));
   }
-  getPlot(id) {
-    const row = this.db.prepare("SELECT payload FROM plots WHERE id=?").get(id);
+  getPlot(id, ownerId = defaultWorkspaceId) {
+    const row = this.db
+      .prepare("SELECT payload FROM plots WHERE id=? AND owner_id=?")
+      .get(id, ownerId);
     if (!row) throw new AppError("PLOT_NOT_FOUND", "找不到指定的劇本。", 404);
     return JSON.parse(row.payload);
   }
-  createPlot(input) {
+  createPlot(input, ownerId = defaultWorkspaceId) {
     const plot = { ...parsePlot(input), id: randomUUID(), version: 1 };
     this.db
-      .prepare("INSERT INTO plots VALUES(?,?,?)")
-      .run(plot.id, plot.version, JSON.stringify(plot));
+      .prepare("INSERT INTO plots(owner_id,id,version,payload) VALUES(?,?,?,?)")
+      .run(ownerId, plot.id, plot.version, JSON.stringify(plot));
     return plot;
   }
-  updatePlot(id, input) {
+  updatePlot(id, input, ownerId = defaultWorkspaceId) {
     const { version, ...definition } = parsePlot(
       input,
       plotDefinitionSchema.extend({ version: plotSchema.shape.version }),
     );
     const plot = { ...definition, id, version: version + 1 };
-    this.getPlot(id);
+    this.getPlot(id, ownerId);
     const result = this.db
-      .prepare("UPDATE plots SET version=?,payload=? WHERE id=? AND version=?")
-      .run(plot.version, JSON.stringify(plot), id, version);
+      .prepare(
+        "UPDATE plots SET version=?,payload=? WHERE id=? AND owner_id=? AND version=?",
+      )
+      .run(plot.version, JSON.stringify(plot), id, ownerId, version);
     if (!result.changes)
       throw new AppError(
         "PLOT_CONFLICT",
@@ -187,25 +276,32 @@ export class Store {
       );
     return plot;
   }
-  active() {
+  active(ownerId = defaultWorkspaceId) {
     return this.db
       .prepare(
-        "SELECT id FROM sessions WHERE state NOT IN ('completed','failed','interrupted')",
+        "SELECT id FROM sessions WHERE owner_id=? AND state NOT IN ('completed','failed','interrupted')",
       )
-      .get()?.id;
+      .get(ownerId)?.id;
   }
-  list() {
+  list(ownerId = defaultWorkspaceId) {
     return this.db
-      .prepare("SELECT payload FROM sessions ORDER BY rowid DESC")
-      .all()
-      .map(({ payload }) => JSON.parse(payload));
+      .prepare(
+        "SELECT owner_id,payload FROM sessions WHERE owner_id=? ORDER BY rowid DESC",
+      )
+      .all(ownerId)
+      .map(({ owner_id: ownerId, payload }) => ({
+        ...JSON.parse(payload),
+        ownerId,
+      }));
   }
-  get(id) {
+  get(id, ownerId = defaultWorkspaceId) {
     const row = this.db
-      .prepare("SELECT payload FROM sessions WHERE id=?")
-      .get(id);
+      .prepare(
+        "SELECT owner_id,payload FROM sessions WHERE id=? AND owner_id=?",
+      )
+      .get(id, ownerId);
     if (!row) throw missing();
-    const s = JSON.parse(row.payload);
+    const s = { ...JSON.parse(row.payload), ownerId: row.owner_id };
     for (const table of collections)
       s[table] = this.db
         .prepare(
@@ -220,12 +316,14 @@ export class Store {
     return s;
   }
   save(drill) {
+    const ownerId = drill.ownerId || defaultWorkspaceId;
     let stage;
     this.db.transaction(() => {
       const exists = this.db
-        .prepare("SELECT id FROM sessions WHERE id=?")
+        .prepare("SELECT owner_id FROM sessions WHERE id=?")
         .get(drill.id);
-      const before = exists ? this.get(drill.id) : null;
+      if (exists && exists.owner_id !== ownerId) throw missing();
+      const before = exists ? this.get(drill.id, ownerId) : null;
       stage = stageMetadata(drill, before?.stage);
       stage.revision++;
       const events = stageEvents(before, drill, stage).map((event) => ({
@@ -243,13 +341,19 @@ export class Store {
         watches,
         recaps,
         report,
+        ownerId: _ownerId,
         ...meta
       } = drill;
       this.db
         .prepare(
-          "INSERT INTO sessions VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,payload=excluded.payload",
+          "INSERT INTO sessions(id,state,payload,owner_id) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,payload=excluded.payload WHERE owner_id=excluded.owner_id",
         )
-        .run(drill.id, drill.state, JSON.stringify({ ...meta, stage }));
+        .run(
+          drill.id,
+          drill.state,
+          JSON.stringify({ ...meta, stage }),
+          ownerId,
+        );
       for (const event of events)
         this.db
           .prepare("INSERT INTO drill_stage_events VALUES(?,?,?)")
@@ -312,16 +416,20 @@ export class Store {
     }
   }
   create(s) {
-    if (this.active())
-      throw Object.assign(conflict(), { activeId: this.active() });
+    const ownerId = s.ownerId || defaultWorkspaceId;
+    if (this.active(ownerId))
+      throw Object.assign(conflict(), { activeId: this.active(ownerId) });
     this.save(s);
   }
   recover() {
-    for (const row of this.list()) {
+    const rows = this.db
+      .prepare("SELECT id,owner_id,state FROM sessions ORDER BY rowid DESC")
+      .all();
+    for (const row of rows) {
       for (const attempt of this.voice.attempts(row.id)) {
         if (["closed", "failed", "interrupted"].includes(attempt.status))
           continue;
-        this.voice.checkpoint(row.id, attempt.id, true);
+        this.voice.checkpoint(row.id, attempt.id, true, row.owner_id);
         this.voice.update(row.id, attempt.id, {
           status: "interrupted",
           endedAt: new Date().toISOString(),
@@ -330,7 +438,7 @@ export class Store {
         });
       }
       if (terminal(row.state)) continue;
-      const s = this.get(row.id);
+      const s = this.get(row.id, row.owner_id);
       s.state = "interrupted";
       s.version++;
       s.busy = false;

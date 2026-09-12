@@ -8,11 +8,13 @@ import {
 import { prompts, roleContext } from "../../../packages/core/src/agents.js";
 import { liveSessionOptions } from "../../../packages/core/src/voice-context.js";
 
+const defaultWorkspaceId = "default";
+
 export const voiceError = (code = "VOICE_UNAVAILABLE") =>
   new AppError(
     code,
     {
-      VOICE_UNAVAILABLE: "語音連線無法使用，請改用文字或稍後重新開啟語音。",
+      VOICE_UNAVAILABLE: "語音連線無法使用，請稍後重新開啟語音。",
       VOICE_AUTH: "語音模型驗證失敗，請檢查後端 OpenAI 設定。",
       VOICE_PROTOCOL: "語音資料格式不正確，連線已停止。",
       VOICE_BACKPRESSURE: "語音連線跟不上播放或收音速度，請重新開啟語音。",
@@ -31,6 +33,8 @@ const failureCode = (error) =>
         : "VOICE_UNAVAILABLE";
 const ended = (item) =>
   ["closed", "failed", "interrupted"].includes(item.status);
+const RELAY_HIGH_WATER_BYTES = 384000;
+const EARLY_AUDIO_MAX_BYTES = 192000;
 
 /** Bound even injected providers that ignore AbortSignal; never expose their errors. */
 export function bounded(run, signal, milliseconds, code = "VOICE_TIMEOUT") {
@@ -103,10 +107,18 @@ export class VoiceCoordinator {
         : {}),
     };
   }
-  itemFor(id, callId) {
+  itemFor(id, callId, ownerId = defaultWorkspaceId) {
     return [...this.items.values()].find(
-      (a) => a.sessionId === id && a.callId === callId,
+      (a) => a.ownerId === ownerId && a.sessionId === id && a.callId === callId,
     );
+  }
+  observeUserMessage(sessionId, callId, message, ownerId = defaultWorkspaceId) {
+    const item = this.itemFor(sessionId, callId, ownerId);
+    if (!item || item.frozen || !this.current(item)) return false;
+    item.pendingUser = Math.max(item.pendingUser, message.sequence);
+    this.send(item, { type: "checkpoint", messages: [message] });
+    this.judge(item);
+    return true;
   }
   current(item) {
     if (
@@ -115,7 +127,7 @@ export class VoiceCoordinator {
       this.items.get(item.id) !== item
     )
       return null;
-    const s = this.engine.store.get(item.sessionId);
+    const s = this.engine.store.get(item.sessionId, item.ownerId);
     const call = s.calls.find((c) => c.id === item.callId);
     return s.state === "in_call" &&
       s.currentCallId === item.callId &&
@@ -124,26 +136,26 @@ export class VoiceCoordinator {
       ? { s, call }
       : null;
   }
-  awaitOwner(id, callId) {
-    const key = `${id}/${callId}`;
+  awaitOwner(id, callId, ownerId = defaultWorkspaceId) {
+    const key = `${ownerId}/${id}/${callId}`;
     clearTimeout(this.waiting.get(key));
     this.waiting.set(
       key,
       setTimeout(() => {
         this.waiting.delete(key);
-        if (!this.itemFor(id, callId) && !this.disposed)
-          this.engine.returnToText(id, callId);
+        if (!this.itemFor(id, callId, ownerId) && !this.disposed)
+          this.engine.returnToText(id, callId, ownerId);
       }, this.limits.reservationMs),
     );
   }
-  reserve(sessionId, callId, requestId) {
+  reserve(sessionId, callId, requestId, ownerId = defaultWorkspaceId) {
     if (!this.client || this.disposed) throw voiceError();
     if (
       typeof requestId !== "string" ||
       !/^[a-zA-Z0-9_-]{1,100}$/.test(requestId)
     )
       throw conflict();
-    const existing = this.itemFor(sessionId, callId);
+    const existing = this.itemFor(sessionId, callId, ownerId);
     if (existing) {
       if (
         existing.requestId === requestId &&
@@ -153,7 +165,7 @@ export class VoiceCoordinator {
         return { voiceId: existing.id, token: existing.token };
       throw conflict();
     }
-    const s = this.engine.store.get(sessionId);
+    const s = this.engine.store.get(sessionId, ownerId);
     const call = s.calls.find((c) => c.id === callId);
     if (
       s.state !== "in_call" ||
@@ -172,13 +184,15 @@ export class VoiceCoordinator {
         .some((a) => a.requestId === requestId)
     )
       throw conflict();
-    const remainingMs = (s.plot.maxVoiceSecondsPerCall ?? 180) * 1000 - usedMs;
+    const remainingMs =
+      Math.min(s.plot.maxVoiceSecondsPerCall ?? 600, 600) * 1000 - usedMs;
     if (remainingMs <= 0) {
-      this.engine.closeCall(sessionId, callId, "voice_duration_limit");
+      this.engine.closeCall(sessionId, callId, "voice_duration_limit", ownerId);
       throw conflict();
     }
     const item = {
       id: randomUUID(),
+      ownerId,
       sessionId,
       callId,
       requestId,
@@ -199,8 +213,8 @@ export class VoiceCoordinator {
       this.engine.store.save(s);
       this.records.create(sessionId, callId, item.id, requestId);
     })();
-    clearTimeout(this.waiting.get(`${sessionId}/${callId}`));
-    this.waiting.delete(`${sessionId}/${callId}`);
+    clearTimeout(this.waiting.get(`${ownerId}/${sessionId}/${callId}`));
+    this.waiting.delete(`${ownerId}/${sessionId}/${callId}`);
     this.items.set(item.id, item);
     item.expiry = setTimeout(
       () => this.stop(item, "VOICE_TIMEOUT"),
@@ -208,12 +222,20 @@ export class VoiceCoordinator {
     );
     return { voiceId: item.id, token: item.token };
   }
-  attach(sessionId, callId, voiceId, token, socket) {
+  attach(
+    sessionId,
+    callId,
+    voiceId,
+    token,
+    socket,
+    ownerId = defaultWorkspaceId,
+  ) {
     const item = this.items.get(voiceId);
     if (
       !item ||
       item.sessionId !== sessionId ||
       item.callId !== callId ||
+      item.ownerId !== ownerId ||
       item.socket ||
       item.frozen ||
       !this.current(item) ||
@@ -230,7 +252,11 @@ export class VoiceCoordinator {
       try {
         if (!item.frozen) this.checkpoint(item);
       } catch {
-        this.engine.fail(sessionId, voiceError("VOICE_EVALUATION"));
+        this.engine.fail(
+          sessionId,
+          voiceError("VOICE_EVALUATION"),
+          item.ownerId,
+        );
       }
     }, this.limits.checkpointMs);
     this.connect(item);
@@ -278,6 +304,7 @@ export class VoiceCoordinator {
             item.sessionId,
             item.callId,
             "voice_duration_limit",
+            item.ownerId,
           );
       }, item.remainingMs);
       connection.closed.then(
@@ -320,9 +347,9 @@ export class VoiceCoordinator {
     });
     if (
       data.type !== "stopped" &&
-      item.socket.bufferedAmount + Buffer.byteLength(payload) > 32768
+      item.socket.bufferedAmount + Buffer.byteLength(payload) >
+        RELAY_HIGH_WATER_BYTES
     ) {
-      this.stop(item, "VOICE_BACKPRESSURE");
       return;
     }
     item.socket.send(payload, (error) => {
@@ -386,7 +413,11 @@ export class VoiceCoordinator {
       bytes.length > 5760
     )
       throw voiceError("VOICE_PROTOCOL");
-    item.live.appendAudio(bytes);
+    try {
+      item.live.appendAudio(bytes);
+    } catch (error) {
+      if (error?.code !== "LIVE_BACKPRESSURE") throw error;
+    }
   }
   receive(item, event) {
     if (item.frozen || !this.current(item)) return;
@@ -402,11 +433,13 @@ export class VoiceCoordinator {
       const bytes = decodeAudio(event.delta);
       if (item.status === "starting") {
         item.earlyAudio ||= [];
-        if (
-          item.earlyAudio.reduce((n, v) => n + v.length, bytes.length) > 12000
+        while (
+          item.earlyAudio.length &&
+          item.earlyAudio.reduce((n, v) => n + v.length, bytes.length) >
+            EARLY_AUDIO_MAX_BYTES
         )
-          this.stop(item, "VOICE_BACKPRESSURE");
-        else item.earlyAudio.push(bytes);
+          item.earlyAudio.shift();
+        if (bytes.length <= EARLY_AUDIO_MAX_BYTES) item.earlyAudio.push(bytes);
       } else this.output(item, bytes);
     } else if (
       event.type === "session.delegation.created" &&
@@ -428,8 +461,7 @@ export class VoiceCoordinator {
   }
   output(item, bytes) {
     if (item.frozen || item.socket?.readyState !== 1) return;
-    if (item.socket.bufferedAmount + bytes.length > 24000) {
-      this.stop(item, "VOICE_BACKPRESSURE");
+    if (item.socket.bufferedAmount + bytes.length > RELAY_HIGH_WATER_BYTES) {
       return;
     }
     item.socket.send(bytes, (error) => {
@@ -437,7 +469,12 @@ export class VoiceCoordinator {
     });
   }
   checkpoint(item, final = false) {
-    const messages = this.records.checkpoint(item.sessionId, item.id, final);
+    const messages = this.records.checkpoint(
+      item.sessionId,
+      item.id,
+      final,
+      item.ownerId,
+    );
     if (messages.length && !item.frozen)
       this.send(item, { type: "checkpoint", messages });
     for (const m of messages)
@@ -487,14 +524,23 @@ export class VoiceCoordinator {
         this.engine.store.save(latest);
         item.checkedUser = through;
         if (result.stop) {
-          this.engine.closeCall(item.sessionId, item.callId, "judge");
+          this.engine.closeCall(
+            item.sessionId,
+            item.callId,
+            "judge",
+            item.ownerId,
+          );
           return;
         }
       }
     })()
       .catch(() => {
         if (!item.judgeAbort.signal.aborted && this.current(item))
-          this.engine.fail(item.sessionId, voiceError("VOICE_EVALUATION"));
+          this.engine.fail(
+            item.sessionId,
+            voiceError("VOICE_EVALUATION"),
+            item.ownerId,
+          );
       })
       .finally(() => {
         item.judging = null;
@@ -526,7 +572,12 @@ export class VoiceCoordinator {
         );
         if (item.frozen || !this.current(item)) return;
         if (result.requestHangup) {
-          this.engine.closeCall(item.sessionId, item.callId, "persona");
+          this.engine.closeCall(
+            item.sessionId,
+            item.callId,
+            "persona",
+            item.ownerId,
+          );
           return;
         }
         if (result.context.trim())
@@ -543,8 +594,8 @@ export class VoiceCoordinator {
         item.assisting = null;
       });
   }
-  seal(sessionId, callId) {
-    const item = this.itemFor(sessionId, callId);
+  seal(sessionId, callId, ownerId = defaultWorkspaceId) {
+    const item = this.itemFor(sessionId, callId, ownerId);
     if (!item || item.frozen) return;
     item.frozen = true;
     item.sealedAt = Date.now();
@@ -558,10 +609,10 @@ export class VoiceCoordinator {
     this.checkpoint(item, true);
     this.records.update(sessionId, item.id, { status: "stopping" });
   }
-  callEnded(sessionId, callId) {
-    clearTimeout(this.waiting.get(`${sessionId}/${callId}`));
-    this.waiting.delete(`${sessionId}/${callId}`);
-    const item = this.itemFor(sessionId, callId);
+  callEnded(sessionId, callId, ownerId = defaultWorkspaceId) {
+    clearTimeout(this.waiting.get(`${ownerId}/${sessionId}/${callId}`));
+    this.waiting.delete(`${ownerId}/${sessionId}/${callId}`);
+    const item = this.itemFor(sessionId, callId, ownerId);
     if (item) {
       item.judgeAbort.abort();
       this.stop(item);
@@ -569,7 +620,7 @@ export class VoiceCoordinator {
   }
   stop(item, errorCode) {
     if (item.stopping) return item.stopping;
-    this.seal(item.sessionId, item.callId);
+    this.seal(item.sessionId, item.callId, item.ownerId);
     item.stopping = Promise.resolve()
       .then(async () => {
         let final;
@@ -609,12 +660,16 @@ export class VoiceCoordinator {
         });
         this.items.delete(item.id);
         if (!this.disposed)
-          this.engine.returnToText(item.sessionId, item.callId);
+          this.engine.returnToText(item.sessionId, item.callId, item.ownerId);
       })
       .catch(() => {
         this.items.delete(item.id);
         if (!this.disposed && !this.engine.disposed)
-          this.engine.fail(item.sessionId, voiceError("VOICE_EVALUATION"));
+          this.engine.fail(
+            item.sessionId,
+            voiceError("VOICE_EVALUATION"),
+            item.ownerId,
+          );
       });
     this.send(item, {
       type: "stopped",

@@ -8,6 +8,8 @@ const errors = {
   VOICE_BACKPRESSURE: "語音傳輸或播放跟不上速度，請重新開啟語音。",
   VOICE_TIMEOUT: "語音連線逾時，請重新開啟語音。",
 };
+const INPUT_HIGH_WATER_BYTES = 192000;
+const OUTPUT_HIGH_WATER_BYTES = 192000;
 export class VoiceMedia {
   constructor({
     workletUrl,
@@ -87,11 +89,12 @@ export class VoiceMedia {
           this.outputPending = Math.max(0, this.outputPending - data.bytes);
         else if (data.type === "audio" && this.state === "active") {
           this.node.port.postMessage({ type: "capture-received" });
-          if (
-            this.socket?.readyState !== 1 ||
-            this.socket.bufferedAmount + data.bytes.byteLength > 24000
+          if (this.socket?.readyState !== 1) this.fail({});
+          else if (
+            this.socket.bufferedAmount + data.bytes.byteLength >
+            INPUT_HIGH_WATER_BYTES
           )
-            this.fail({ code: "VOICE_BACKPRESSURE" });
+            this.node.port.postMessage({ type: "capture-gap" });
           else this.socket.send(data.bytes);
         }
       };
@@ -154,11 +157,9 @@ export class VoiceMedia {
         if (this.closed) return;
         if (data instanceof ArrayBuffer) {
           if (this.state === "active") {
-            this.outputPending += data.byteLength;
-            if (this.outputPending > 12000) {
-              this.fail({ code: "VOICE_BACKPRESSURE" });
+            if (this.outputPending + data.byteLength > OUTPUT_HIGH_WATER_BYTES)
               return;
-            }
+            this.outputPending += data.byteLength;
             this.node.port.postMessage({ type: "audio", bytes: data }, [data]);
           }
           return;
@@ -223,7 +224,7 @@ export class VoiceMedia {
         errors[error?.name] ||
         errors[error?.code] ||
         (error?.code ? error?.message : null) ||
-        "語音連線中斷，請改用文字或再次開啟語音。",
+        "語音連線中斷，請再次開啟語音。",
     });
   }
   stop(notify = true, error) {
