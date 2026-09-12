@@ -22,7 +22,7 @@ test("anti-fraud starts with the prepared chat; playback, attachment and verific
   const initialHistory = await page.request.get("/api/drills");
   expect(initialHistory.ok()).toBe(true);
   const before = await initialHistory.json();
-  await page.getByLabel("讓練習更貼近你").fill("我想練習查證。");
+  await expect(page.getByLabel("選填背景")).toHaveCount(0);
   await page.getByRole("button", { name: /開始演練/ }).click();
   await expect(
     page.getByRole("heading", { name: "從一則商品詢問開始" }),
@@ -76,7 +76,7 @@ test("anti-fraud starts with the prepared chat; playback, attachment and verific
   expect(creates).toBe(0);
   expect(await (await page.request.get("/api/drills")).json()).toEqual(before);
   await page.getByRole("button", { name: "返回劇本大廳" }).click();
-  await expect(page.getByLabel("讓練習更貼近你")).toHaveValue("我想練習查證。");
+  await expect(page.getByLabel("選填背景")).toHaveCount(0);
   await page.getByRole("button", { name: /開始演練/ }).click();
   await page.reload();
   await expect(
@@ -85,14 +85,13 @@ test("anti-fraud starts with the prepared chat; playback, attachment and verific
   expect(creates).toBe(0);
 });
 
-test("mobile reduced-motion chat hands off once, retains background, and excludes the prepared messages from history and reports", async ({
+test("mobile reduced-motion chat hands off once and excludes the prepared messages from history and reports", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
-  const background = "我想學習如何選擇可靠的查證管道。";
-  await page.getByLabel("讓練習更貼近你").fill(background);
+  await expect(page.getByLabel("選填背景")).toHaveCount(0);
   await page.getByRole("button", { name: /開始演練/ }).click();
   await expect(
     page.getByRole("button", { name: "申請客服回電" }),
@@ -135,10 +134,7 @@ test("mobile reduced-motion chat hands off once, retains background, and exclude
   await page.unroute("**/api/drills");
   await page.getByRole("button", { name: "申請客服回電" }).click();
   await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
-  expect(creates).toEqual([
-    { plotId: "anti-fraud", background },
-    { plotId: "anti-fraud", background },
-  ]);
+  expect(creates).toEqual([{ plotId: "anti-fraud" }, { plotId: "anti-fraud" }]);
   const id = await page.evaluate(() => location.hash.slice(1));
   const drill = await (await page.request.get(`/api/drills/${id}`)).json();
   expect(drill.calls).toEqual([]);
@@ -147,6 +143,19 @@ test("mobile reduced-motion chat hands off once, retains background, and exclude
   await page.getByRole("button", { name: "結束整場演練" }).click();
   await expect(page.locator(".report")).toContainText("目前證據不足");
   await expect(page.locator(".report")).not.toContainText(sellerReply);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: testInfo.outputPath("report-mobile.png"),
+    fullPage: true,
+  });
   await page.reload();
   await expect(page.locator(".report")).toBeVisible();
   await expect(page.locator(".marketplace-intro")).toHaveCount(0);

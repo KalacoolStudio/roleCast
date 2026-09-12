@@ -28,7 +28,7 @@ async function sendThroughApi(page, text) {
   expect(response.ok()).toBe(true);
   await expect.poll(async () => (await currentDrill(page)).busy).toBe(false);
 }
-test("desktop and mobile layout; failed and interrupted histories remain readable", async ({
+test("desktop and mobile layout; historical reports preserve failed and interrupted records", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1080 });
@@ -40,15 +40,23 @@ test("desktop and mobile layout; failed and interrupted histories remain readabl
     path: testInfo.outputPath("desktop.png"),
     fullPage: true,
   });
-  await page.locator(".history-item").filter({ hasText: "演練未完成" }).click();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await expect(page.getByRole("heading", { name: "歷史報告" })).toBeVisible();
+  await page
+    .locator(".report-index button")
+    .filter({ hasText: "演練未完成" })
+    .click();
   await expect(page.getByRole("alert")).toContainText("模型 API 驗證失敗");
-  await page.locator(".history-item").filter({ hasText: "演練已中斷" }).click();
+  await page
+    .locator(".report-index button")
+    .filter({ hasText: "演練已中斷" })
+    .click();
   await expect(page.getByRole("alert")).toContainText("服務已重新啟動");
   await page.getByRole("button", { name: /開始新演練/ }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "演練紀錄 ＋" }).click();
-  await expect(page.locator(".history-item").first()).toBeVisible();
-  await page.getByRole("button", { name: "演練紀錄 −" }).click();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await expect(page.locator(".report-index button").first()).toBeVisible();
+  await page.getByRole("button", { name: /開始新演練/ }).click();
   await expect(page.getByRole("button", { name: /開始演練/ })).toBeVisible();
   expect(
     await page.evaluate(
@@ -62,7 +70,7 @@ test("desktop and mobile layout; failed and interrupted histories remain readabl
 });
 test("scenario selection, keyboard interaction, refresh, StopCall and report evidence", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "選擇今天的練習" }),
@@ -75,7 +83,7 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
       "紀錄保存在本機。演練內容會送至你設定的外部 LLM API 進行推論。",
     ),
   ).toBeVisible();
-  await page.getByLabel("讓練習更貼近你").fill("我想練習查證。");
+  await expect(page.getByLabel("選填背景")).toHaveCount(0);
   await startDrill(page);
   await acceptThroughApi(page);
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
@@ -85,11 +93,20 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".message.user")).toHaveCount(1);
   await sendThroughApi(page, "你是詐騙，我要透過官方管道查證");
+  await expect(page).toHaveURL(/#reports\//);
   await expect(
     page.getByRole("heading", { name: "這次練習，你帶走了什麼？" }),
   ).toBeVisible();
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".evidence a").first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "演練時間軸" })).toBeVisible();
+  await expect(page.getByLabel("時間軸位置")).toHaveAttribute("max", /[1-9]/);
+  await page.getByRole("button", { name: "下一格" }).click();
+  await expect(page.locator(".timeline-controls > span")).toContainText("2 /");
+  await page.screenshot({
+    path: testInfo.outputPath("report-with-timeline.png"),
+    fullPage: true,
+  });
   await page.locator(".evidence a").first().click();
   await page.reload();
   await expect(
@@ -119,7 +136,8 @@ test("interview recalls a persona and changes role on a later call; finishes wit
   await expect(page.locator(".call-heading h2").nth(1)).toContainText("林小姐");
   await expect(page.locator(".call-heading h2").nth(2)).toContainText("陳主管");
   await page.getByRole("button", { name: /開始下一次練習/ }).click();
-  await page.locator(".history-item").first().click();
+  await page.getByRole("button", { name: /歷史報告/ }).click();
+  await page.locator(".report-index button").first().click();
   await expect(page.locator(".report")).toBeVisible();
 });
 test("early finish reports insufficient evidence and network recovery works", async ({

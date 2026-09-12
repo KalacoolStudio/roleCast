@@ -6,9 +6,10 @@ export const positions = {
   entry: [-12, 92],
   foyer: [18, 92],
   waiting: [18, 64],
-  aisle: [52, 64],
-  call: [52, 76],
-  watch: [68, 65],
+  office: [22, 78],
+  aisle: [49, 71],
+  desk: [34, 65],
+  watch: [48, 68],
 };
 export const activityLabels = {
   planning_started: "老闆正在安排下一通",
@@ -32,13 +33,15 @@ const actor = (position, extra = {}) => ({
 });
 export function snapshotScene(drill) {
   const call = drill.calls.find((c) => c.id === drill.currentCallId);
-  const person = drill.pendingCall?.persona || call?.persona;
+  const previous = drill.calls.at(-1)?.persona;
+  const person = drill.pendingCall?.persona || call?.persona || previous;
   const sprite =
     drill.stage?.personas.find((p) => p.id === person?.id)?.spriteKey ||
     "persona-01";
   const visible =
-    ["awaiting_call", "in_call"].includes(drill.state) &&
-    !drill.finishRequested;
+    (drill.state === "awaiting_call" && drill.pendingCall) ||
+    drill.state === "in_call" ||
+    previous;
   return {
     mastermind: actor("boss", {
       bubble:
@@ -63,16 +66,25 @@ export function snapshotScene(drill) {
     ),
     persona:
       visible && person
-        ? actor("call", {
-            ...person,
-            spriteKey: sprite,
-            bubble:
-              drill.state === "awaiting_call"
-                ? "等待接通"
-                : drill.busy
-                  ? "正在回覆…"
-                  : "通話中",
-          })
+        ? actor(
+            drill.state === "in_call"
+              ? "desk"
+              : drill.pendingCall
+                ? "waiting"
+                : "office",
+            {
+              ...person,
+              spriteKey: sprite,
+              bubble:
+                drill.state === "awaiting_call"
+                  ? "等待接通"
+                  : drill.state !== "in_call"
+                    ? "留在辦公室"
+                    : drill.busy
+                      ? "正在回覆…"
+                      : "通話中",
+            },
+          )
         : null,
     phase: drill.state,
   };
@@ -104,8 +116,6 @@ function framesFor(event, scene, snapshot) {
         }),
         frame(350, { persona: actor("foyer", { ...person, walking: true }) }),
         frame(450, { persona: actor("waiting", { ...person, walking: true }) }),
-        frame(500, { persona: actor("aisle", { ...person, walking: true }) }),
-        frame(350, { persona: actor("call", { ...person, walking: true }) }),
       ];
     }
     case "call_started":
@@ -124,20 +134,16 @@ function framesFor(event, scene, snapshot) {
           phase: "leaving",
         }),
         frame(350, {
-          ...move("persona", "waiting", { facing: "left", bubble: "本通結束" }),
+          ...move("persona", "office", {
+            facing: "left",
+            bubble: "留在辦公室",
+          }),
           judge: actor("report", {
             walking: true,
             facing: "left",
             bubble: "整理本通紀錄…",
           }),
         }),
-        frame(300, {
-          ...move("persona", "foyer", { facing: "left", bubble: "本通結束" }),
-        }),
-        frame(300, {
-          ...move("persona", "entry", { facing: "left", bubble: "本通結束" }),
-        }),
-        frame(0, { persona: null }),
       ];
     case "recap_started":
       return [
@@ -217,7 +223,7 @@ export class StageDirector {
       return;
     }
     this.scene = { ...this.scene, ...frame.patch };
-    // Ignore a missing departing persona (e.g. a connection restored at recap).
+    // Ignore a missing persona (e.g. a connection restored before assignment).
     if (this.scene.persona && !this.scene.persona.id) this.scene.persona = null;
     this.emit(frame.duration);
     this.timer = this.clock.set(() => this.next(), frame.duration);

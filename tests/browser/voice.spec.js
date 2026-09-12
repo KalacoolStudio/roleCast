@@ -18,6 +18,8 @@ test.beforeEach(async ({ page }) => {
       captures: 0,
       outputs: 0,
       permissions: 0,
+      ringOscillators: [],
+      ringStops: 0,
     };
     const acquire = navigator.mediaDevices.getUserMedia.bind(
       navigator.mediaDevices,
@@ -33,6 +35,16 @@ test.beforeEach(async ({ page }) => {
       constructor(...args) {
         super(...args);
         window.voiceTest.contexts.push(this);
+      }
+      createOscillator(...args) {
+        const oscillator = super.createOscillator(...args);
+        const stop = oscillator.stop.bind(oscillator);
+        oscillator.stop = (...stopArgs) => {
+          window.voiceTest.ringStops++;
+          return stop(...stopArgs);
+        };
+        window.voiceTest.ringOscillators.push(oscillator);
+        return oscillator;
       }
     };
     const Worklet = window.AudioWorkletNode;
@@ -158,6 +170,21 @@ test("voice-only calls save speech automatically and keep text controls absent",
   await page.getByRole("button", { name: "掛斷本通" }).click();
   await released(page);
   await expect(page.locator(".call")).toHaveCount(1);
+});
+test("an incoming call rings once and stops when answering begins", async ({
+  page,
+}) => {
+  await start(page);
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringOscillators.length))
+    .toBe(2);
+  await page.getByRole("button", { name: "用語音接通" }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.voiceTest.ringStops))
+    .toBe(2);
+  await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
+  await page.getByRole("button", { name: "掛斷本通" }).click();
+  await released(page);
 });
 test("ATM drawer updates the drill balance and sends transfer and withdrawal evidence", async ({
   page,

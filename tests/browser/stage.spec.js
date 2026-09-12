@@ -30,7 +30,7 @@ test("live stage follows real calls, retains persona identity, and restores with
   ).toBeVisible();
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-position",
-    "call",
+    "waiting",
     { timeout: 5000 },
   );
   const sprite = await page
@@ -47,6 +47,10 @@ test("live stage follows real calls, retains persona identity, and restores with
     "data-position",
     "watch",
   );
+  await expect(page.locator(".stage-character.persona")).toHaveAttribute(
+    "data-position",
+    "desk",
+  );
   await page.screenshot({
     path: testInfo.outputPath("stage-desktop-call.png"),
     fullPage: true,
@@ -56,7 +60,7 @@ test("live stage follows real calls, retains persona identity, and restores with
   await page.reload();
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-position",
-    "call",
+    "desk",
   );
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-walking",
@@ -76,8 +80,11 @@ test("live stage follows real calls, retains persona identity, and restores with
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await page.getByRole("button", { name: "結束整場演練" }).click();
   await expect(page.locator(".report")).toBeVisible();
-  await expect(page.locator(".stage-character.persona")).toHaveCount(0);
-  await expect(page.locator(".stage-caption")).toContainText("紀錄已保存");
+  await expect(page).toHaveURL(/#reports\//);
+  await expect(page.getByRole("button", { name: /歷史報告/ })).toHaveAttribute(
+    "class",
+    /selected/,
+  );
   expect(errors).toEqual([]);
 });
 
@@ -158,7 +165,7 @@ test("a legacy snapshot without stage metadata remains usable", async ({
   await page.reload();
   await expect(page.locator(".stage-character.persona")).toHaveAttribute(
     "data-position",
-    "call",
+    "desk",
   );
   await expect(page.getByLabel("你的回覆")).toHaveCount(0);
   await expect(page.locator(".stage-activity li")).toHaveCount(0);
@@ -197,10 +204,11 @@ test("walk sprites change frames while Persona and Judge actually move, then ret
   await startDrill(page);
   const persona = page.locator(".stage-character.persona"),
     judge = page.locator(".stage-character.judge");
-  await expect(persona).toHaveAttribute("data-position", "call");
+  await expect(persona).toHaveAttribute("data-position", "waiting");
   await expect(persona).toHaveAttribute("data-walking", "false");
   await expect(persona).toHaveAttribute("data-frame", "0");
   await acceptThroughApi(page);
+  await expect(persona).toHaveAttribute("data-position", "desk");
   await expect(judge).toHaveAttribute("data-walking", "true");
   await page.screenshot({ path: testInfo.outputPath("judge-walking.png") });
   await expect(judge).toHaveAttribute("data-walking", "false");

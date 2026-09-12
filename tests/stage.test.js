@@ -297,6 +297,7 @@ it("paces handoff only after completed recap, bounds lag and cancels motion on f
   await vi.advanceTimersByTimeAsync(1300);
   expect(scene.judge.position).toBe("report");
   expect(scene.judge.handoff).not.toBe(true);
+  expect(scene.persona.position).toBe("office");
   d.update({ ...recap, state: "planning" }, [
     e(n + 3, "recap_completed"),
     e(n + 4, "planning_started"),
@@ -310,12 +311,15 @@ it("paces handoff only after completed recap, bounds lag and cancels motion on f
     persona: person,
     action: "reused",
   }));
-  d.update({ ...snapshot, state: "awaiting_call" }, burst);
+  d.update(
+    { ...snapshot, state: "awaiting_call", pendingCall: { persona: person } },
+    burst,
+  );
   await vi.advanceTimersByTimeAsync(2999);
   expect(d.queue).toHaveLength(0);
-  expect(scene.persona.position).toBe("call");
+  expect(scene.persona.position).toBe("waiting");
   d.update({ ...snapshot, state: "failed" }, []);
-  expect(scene.persona).toBeNull();
+  expect(scene.persona.position).toBe("office");
   expect(d.queue).toHaveLength(0);
   d.update(snapshot, [], true);
   expect(scene).toMatchObject(snapshotScene(snapshot));
