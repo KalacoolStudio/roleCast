@@ -2,6 +2,7 @@ import { DrillStage } from "./stage/DrillStage.jsx";
 import { connectDrill } from "./stage/feed.js";
 import { PlotEditor } from "./PlotEditor.jsx";
 import { Home, CastMark } from "./Home.jsx";
+import { MarketplaceIntro } from "./MarketplaceIntro.jsx";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
@@ -74,6 +75,7 @@ function App() {
   const feed = useRef(null);
   const [activeId, setActiveId] = useState(null);
   const [managing, setManaging] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const voice = useVoice(id, drill, voiceApi);
   const following = useRef(true);
@@ -84,6 +86,7 @@ function App() {
     following.current = true;
     setFollow(true);
     setManaging(false);
+    setShowIntro(false);
     selected.current = next;
     setId(next);
     location.hash = next;
@@ -260,6 +263,7 @@ function App() {
           className={`nav-item ${managing ? "selected" : ""}`}
           onClick={() => {
             voice.stop();
+            setShowIntro(false);
             setManaging(true);
           }}
         >
@@ -312,9 +316,11 @@ function App() {
             WORKSPACE <span className="slash">/</span>{" "}
             {managing
               ? "劇本工作室"
-              : drill
-                ? "演練現場 · DRILL"
-                : "劇本練習 · PLOT"}
+              : showIntro
+                ? "情境示範 · CHAT"
+                : drill
+                  ? "演練現場 · DRILL"
+                  : "劇本練習 · PLOT"}
           </span>
           <span className="topbar-note">Adaptive role orchestration</span>
         </header>
@@ -339,6 +345,14 @@ function App() {
               setPlotId(plotId);
             }}
           />
+        ) : showIntro ? (
+          <MarketplaceIntro
+            onContinue={start}
+            onBack={() => select("")}
+            acting={acting}
+            activeId={activeId}
+            onResume={select}
+          />
         ) : !id ? (
           <Home
             plots={plots}
@@ -346,7 +360,9 @@ function App() {
             onSelect={setPlotId}
             background={background}
             onBackground={setBackground}
-            onStart={start}
+            onStart={() =>
+              plotId === "anti-fraud" ? setShowIntro(true) : start()
+            }
             acting={acting}
             activeId={activeId}
             onResume={select}

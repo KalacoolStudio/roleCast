@@ -5,7 +5,7 @@ The specifications under `specs/` describe the current combined application. Com
 | Capability | Current contract |
 | --- | --- |
 | [simulation-lifecycle](specs/simulation-lifecycle/spec.md) | Plot selection, drill snapshots, Persona identity, planning, and call boundaries |
-| [text-training-ui](specs/text-training-ui/spec.md) | Prototype styling, illustrated plot selection, responsive controls, text interaction, history, and refresh safety |
+| [text-training-ui](specs/text-training-ui/spec.md) | Prototype styling, illustrated plot selection, prepared anti-fraud chat, responsive controls, text interaction, history, and refresh safety |
 | [evaluation-reporting](specs/evaluation-reporting/spec.md) | Independent Judge decisions, one Recap per call, and evidence-based Reporter output |
 | [local-runtime](specs/local-runtime/spec.md) | Shared credentials, model output contracts, local persistence, migrations, and project commands |
 | [plot-authoring](specs/plot-authoring/spec.md) | Plot editing, import/export, role guidance, and immutable drill configuration |
@@ -31,5 +31,6 @@ Completed changes, in implementation order:
 Active changes with published specs already synchronized:
 
 - [align-website-prototype-style](changes/align-website-prototype-style/) — retrospective proposal, design, completed tasks, and validation for the orange/cream theme and bundled scene previews. Also corrects the existing office-stage background description. The local `PORT=3001` fix is recorded as configuration evidence; the application default remains 3000. Implementation is complete; the change remains active for review and later archive.
+- [add-anti-fraud-chat-intro](changes/add-anti-fraud-chat-intro/) — prepared marketplace chat before the built-in anti-fraud call drill, with local photos, ordered playback, an enlarged order notice, independent-verification explanation, and explicit callback handoff. Scripted messages remain separate from real transcripts and evaluation. Planning artifacts preceded implementation; see its validation record for browser coverage.
 
 Run `openspec validate --all --strict` to validate current specs and active changes, or `openspec list` to inspect pending work.

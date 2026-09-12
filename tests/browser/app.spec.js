@@ -1,3 +1,4 @@
+import { startDrill } from "../support/browser.js";
 import { test, expect } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 test("desktop and mobile layout; failed and interrupted histories remain readable", async ({
@@ -48,7 +49,7 @@ test("scenario selection, keyboard interaction, refresh, StopCall and report evi
     ),
   ).toBeVisible();
   await page.getByLabel("讓練習更貼近你").fill("我想練習查證。");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await page.getByRole("button", { name: /接通對話/ }).click();
   const input = page.getByLabel("你的回覆");
   await expect(input).toBeEnabled();
@@ -81,7 +82,7 @@ test("interview recalls a persona and changes role on a later call; finishes wit
     .locator(".plot-card")
     .filter({ hasText: "後端工程師面試" })
     .click();
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   for (let call = 1; call <= 3; call++) {
     await page.getByRole("button", { name: /接通對話/ }).click();
     await expect(page.getByLabel("你的回覆")).toBeEnabled();
@@ -104,7 +105,7 @@ test("early finish reports insufficient evidence and network recovery works", as
   page,
 }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await expect(page.getByRole("button", { name: /接通對話/ })).toBeVisible();
   await page.route("**/api/drills/*", (route) => route.abort());
   await page.reload();
@@ -173,7 +174,7 @@ test("plot editor copies, edits three prompts, exports/imports and launches an i
   await expect(page.getByRole("status")).toContainText("已儲存劇本 · v1");
   await page.getByRole("button", { name: "使用此劇本 ↗" }).click();
   await expect(page.locator(".plot-card.chosen")).toContainText("匯入客服演練");
-  await page.getByRole("button", { name: /開始演練/ }).click();
+  await startDrill(page);
   await expect(
     page.getByRole("heading", { name: "匯入客服演練" }),
   ).toBeVisible();
