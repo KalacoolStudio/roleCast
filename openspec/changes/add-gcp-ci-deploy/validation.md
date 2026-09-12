@@ -1,10 +1,10 @@
 # Validation evidence
 
-Validated on 2026-09-12 in the isolated `roleCast-task-2` worktree on `gcp-ci-deploy`. Implementation is maintained on `gcp-ci-deploy` for review. GitHub production configuration is in place; GCP infrastructure has not been provisioned and no live release has been deployed. Live acceptance task **6.5 remains pending**.
+Validated on 2026-09-12 in the isolated `roleCast-task-2` worktree on `gcp-ci-deploy`. Implementation is maintained on `gcp-ci-deploy` for review. GCP infrastructure, approved access, pinned Secret Manager values and GitHub production configuration are provisioned and verified. The PR has not been merged and no application release has been deployed. Live acceptance task **6.5 remains pending**.
 
 ## Integration and versions
 
-Integrated GitHub main `ff312805dcefc58c8473384f2efc103d72fd0d41`, including customizable plots/drills, character assets, live drill stage and stricter model-output contracts. Resolved the API/frontend overlaps while preserving plot authoring, legacy session routes and cloud metadata/disclosures. The storage schema is now **3**; the backup compatibility helper imports the storage schema constant. The other worktree remains on `gpt-live-1-module`; no uncommitted files or processes were imported from it.
+Integrated GitHub main `ff312805dcefc58c8473384f2efc103d72fd0d41`, including customizable plots/drills, character assets, live drill stage and stricter model-output contracts. Resolved the API/frontend overlaps while preserving plot authoring, legacy session routes and cloud metadata/disclosures. The storage schema is now **3**; the backup compatibility helper imports the storage schema constant. The concurrent worktree continues independently; no uncommitted files or processes were imported from it.
 
 | Component | Tested version |
 | --- | --- |
@@ -33,7 +33,8 @@ Actions are pinned by full commit SHA. Terraform and actionlint release download
 | Docker image artifact round trip | Save/load preserves the exact tested image ID |
 | Terraform format, backend-free init/validate | Passed with pinned provider lockfile |
 | `terraform test` | **4 mock-provider tests passed** |
-| actionlint and `bash -n` | Passed workflow and shell syntax checks |
+| actionlint with ShellCheck 0.11.0 and `bash -n` | Passed workflow and shell checks |
+| GitHub CI for code commit `3f5e98f` | Both application and infrastructure jobs passed: [run 34676334533](https://github.com/KalacoolStudio/roleCast/actions/runs/34676334533) |
 | `git diff --check` and merge-conflict inspection | Passed |
 | `openspec validate add-gcp-ci-deploy --strict` | Passed |
 
@@ -43,35 +44,49 @@ Host tests use real temporary files and `flock`, with Docker/systemd/block-devic
 
 COS `/var` is non-executable, so generated units, transient operations and operator commands invoke host scripts using `/bin/bash`. Registry authentication uses the preinstalled `docker-credential-gcr` with a writable Docker config under `/run`. These choices were checked against the [COS filesystem documentation](https://docs.cloud.google.com/container-optimized-os/docs/concepts/disks-and-filesystem) and [container runtime guidance](https://docs.cloud.google.com/container-optimized-os/docs/how-to/run-container-instance).
 
-## Read-only GCP review
+## Applied GCP bootstrap and live preflight
 
-The supplied project `project-783f506d-73dd-47d4-96d` is active and billing enabled. Read-only VM and bucket inventory returned no existing resources. GitHub reports repository ID `1366870434`, owner ID `6670851`, and default branch `main`.
+Project `project-783f506d-73dd-47d4-96d` (number `409197180949`) is active and billing enabled. The user approved `drain.cy.chang@gmail.com` for both application and administrator access and explicitly approved reusing only the three existing LLM settings. GitHub CLI is authenticated as `Drainet`, with ADMIN access to `KalacoolStudio/roleCast`; the stable repository ID is `1366870434` and organization owner ID is `6670851`.
 
-A real provider plan using the signed-in Google identity succeeded: **41 to add, 0 to change, 0 to destroy**. It used a temporary local backend and provisional app/admin access for that identity solely to review the proposed resources. It did not create a state bucket, apply IAM policies or provision a VM. The review plan is disposable; rebuild a plan with the approved identities and real GCS backend before applying. Runtime secret payload resources are absent.
+Created the private Terraform state bucket `gs://project-783f506d-73dd-47d4-96d-rolecast-tfstate` in `asia-east1`, with uniform bucket IAM, enforced public-access prevention and versioning. The actual checkout uses its `rolecast/production` GCS backend. A fresh reviewed plan and apply completed with **41 added, 0 changed, 0 destroyed**. Runtime secret payloads are not Terraform resources. Terraform used a short-lived OAuth token from the existing gcloud login only in its process environment; no token was printed, persisted or placed in backend configuration.
 
-The local ignored `infra/gcp/terraform.tfvars` records the supplied project, default Taiwan region/zone and verified repository IDs. Application/administrator identities remain unset. GitHub CLI is authenticated as `Drainet`, now verified to have ADMIN access to the transferred organization repository `KalacoolStudio/roleCast`. The repository ID stayed `1366870434`; the owner ID changed to `6670851`. The read-only plan was regenerated successfully after this transfer with the updated organization trust identity; it still proposes 41 additions and no changes or deletions. Provisional application/admin identities remain subject to the user's selection before apply. Application-default credentials are also absent; the read-only plan used an ephemeral OAuth token from the existing gcloud login without printing or persisting it. Operators can configure ADC as documented for normal Terraform use.
+The resulting VM is `rolecast` in `asia-east1-b`, with COS image `cos-stable-121-18867-584-7`. The dedicated `rolecast-data` disk initialized successfully as ext4, label `rolecast-data`, UUID `e6f3dac6-28f2-4ccf-8ef9-98f2f6dbe194`. The app directory is UID/GID `1000:1000`, mode 0700; state and backup directories are root-owned, mode 0700. After initial preparation, `initialize_data_disk` was set to **false**. A second reviewed apply changed only VM startup metadata (**0 added, 1 changed, 0 destroyed**). The final real Terraform plan returned **no changes** after reboot.
 
-The organization transfer is reflected in Terraform defaults, the ignored local bootstrap settings, and deployment documentation. The `production` GitHub environment has a custom deployment branch rule allowing `main`, no required reviewers, and all seven non-secret GCP variables configured and read back. These variables refer to planned infrastructure; they do not imply the VM or WIF provider already exists.
+A controlled reboot loaded the disabled initialization setting and retained the same disk UUID and a disposable persistence marker. The kernel device name changed from `/dev/sdb` to `/dev/sda`; the stable `/dev/disk/by-id/google-rolecast-data` lookup and mount verification succeeded. The marker was then removed. Disk preparation and the daily backup timer are active. The app reports `Awaiting first deployment`; no production SQLite database has been created.
+
+The three approved values were written directly to Secret Manager through stdin and verified byte-for-byte without displaying them. All pinned references use version **1**:
+
+- `rolecast-llm-api-key/versions/1`
+- `rolecast-llm-base-url/versions/1`
+- `rolecast-llm-model/versions/1`
+
+An isolated container on the VM verified metadata identity, all three secret reads and value formats, the preinstalled Artifact Registry credential helper, repository read permission, and upload of a non-secret permission probe into the private backup bucket. The upload receipt's size and MD5 matched. The probe object is `backups/preflight/59c6b740-81e9-4276-a8d7-f5a72570c737.json` and follows the bucket's 30-day expiry; it contains no application data or credentials. Secret access still worked after reboot. One tiny authenticated Chat Completions request to the configured model provider succeeded from the VM without recording provider credentials or response text.
+
+A disposable credential-free HTTP listener on port 8080 verified successful access through the approved user's IAP tunnel and blocked direct public access while the listener was healthy. The listener and local tunnel were removed. This proves the network path, not application health or app-only/ungranted identity behavior: the approved account is also a project owner and administrator. Those narrower access tests remain part of live acceptance.
+
+The GitHub `production` environment permits only the `main` branch, has no required deployment reviewers, and contains all seven non-secret variables. Every value was compared against the **applied** Terraform outputs and matched. WIF is provisioned with the repository ID, organization ID, main ref and deployment workflow restriction. Actual GitHub OIDC exchange and registry publication await a main-branch deployment. Existing main branch protection/rulesets were inspected and are absent; the deployment workflow's own validation gates still run for main pushes. The guide explains protection if the team wants to enforce PR-only changes.
+
+Bootstrap logs and receipts are stored under the ignored local `.tmp/` directory. This evidence distinguishes permission probes and disk persistence from the application/database acceptance checks below; it does not claim a live application deployment or actual database backup/restore.
 
 ## Spec scenario coverage
 
 | Requirement and scenarios | Automated evidence / remaining live proof |
 | --- | --- |
 | Complete release runtime: use app; another drill active | Container asynchronous-work smoke, existing engine/API conflict tests; live authenticated model exercise pending |
-| Private access: authorized, unauthorized, unrelated Origin | Terraform IAP/firewall/grant assertions and cloud-runtime Origin tests; actual granted/denied IAP connections and public-port rejection pending |
+| Private access: authorized, unauthorized, unrelated Origin | Terraform IAP/firewall/grant assertions and cloud-runtime Origin tests; approved-owner IAP routing and public-port rejection passed with a disposable listener; app-only/ungranted identity and real-app checks pending |
 | Explicit configuration: valid cloud config; missing volume | Cloud-runtime tests, native production-container startup, missing mount smoke, host mount/device adapters |
-| Secret isolation: credential-free build; denied secret | Build sentinel check, runtime metadata test, private env-file/denied-fetch tests; VM identity and actual Secret Manager permission check pending |
+| Secret isolation: credential-free build; denied secret | Build sentinel check, runtime metadata test, private env-file/denied-fetch tests; actual VM identity reads, reboot access and provider connectivity passed |
 | Accurate cloud notice | Playwright cloud-mode test verifies GCP, sharing and external-provider notice |
 | Local compatibility | Existing unit/integration and browser suite, local defaults and precedence tests; test port isolated from WIP |
-| Main automation: merge, unmerged work, manual retry | Workflow triggers/job guards, deploy-config invalid-ref/event tests, main-head checks; actual GitHub execution pending |
+| Main automation: merge, unmerged work, manual retry | Workflow triggers/job guards, deploy-config invalid-ref/event tests, main-head checks; PR CI passed; actual main deployment pending |
 | Validation gates: failed check; tested identity | Reusable workflow dependency graph, image smoke and artifact save/load identity; registry publish digest/VM correspondence pending |
 | Scoped identity: trusted/untrusted claims | Pinned main/workflow/repository/owner CEL restriction and Terraform assertions; actual OIDC exchange/denial pending |
-| Bootstrap: first release; incomplete setup | Complete operator guide, real read-only resource plan, configuration error tests, preflight failures; actual first provision/release pending |
+| Bootstrap: first release; incomplete setup | Complete operator guide, successful real apply and VM/secret/network preflight, configuration error tests; first release pending |
 | Serialized releases: overlapping main changes | Real-lock host concurrency tests, monotonic watermark, main-head checks and non-cancelling deploy concurrency |
 | Running release: healthy/unhealthy | Host success, health failure, rollback outcomes and production container smoke; live workflow summary pending |
 | Persistent records: image/VM replacement | Container replacement/restore plus disk lifecycle configuration and real plan; live VM replacement/reboot persistence pending |
 | One writer: active drill restart; concurrent replacement | Container restart interruption, existing storage uniqueness, host stop/lock/concurrent replacement tests |
-| Off-VM backups: live WAL; required backup failure | Cloud-data WAL backup leaves active drill untouched; manifest/checksum/receipt tests; host failure/last-success tests; actual GCS object upload pending |
+| Off-VM backups: live WAL; required backup failure | Cloud-data WAL backup leaves active drill untouched; manifest/checksum/receipt tests; host failure/last-success tests; actual runtime-identity permission probe uploaded successfully; actual SQLite/manifest upload pending |
 | Release recovery: compatible/incompatible prior image | Host rollback, schema refusal, failed recovery and no-prior-image tests; direct schema helper rejects newer database without migration |
 | Explicit restoration: selected/invalid backup | Real isolated-volume restore, checksum corruption rejection, host pre-validation and SQLite/WAL/SHM preservation tests; isolated restore of actual GCS backup pending |
 
@@ -79,11 +94,12 @@ The older unarchived MVP change describes **local** runtime behavior. This chang
 
 ## Pending live acceptance — task 6.5
 
-1. Confirm app users and restore/deploy administrators; configure remote state, and review/apply a fresh infrastructure plan. Enter the three production Secret Manager values and record numeric versions separately from Terraform state.
-2. Configure GitHub's `production` variables/branch rule and main protection. Merge the reviewed deployment change, or dispatch the workflow at current main after setup. Record run URL, commit, tested image ID, published digest and `host.sh status`.
-3. Verify frontend, `/api/health`, `/api/runtime`, plot authoring and one deliberate model exercise through an authorized app-only identity. Verify this identity cannot SSH, an ungranted identity cannot tunnel, and direct internet access to port 8080 fails.
-4. Verify that required validation failure blocks deployment and incorrect OIDC claims cannot impersonate the deployment identity. Exercise overlapping updates and a failed candidate in an isolated rehearsal environment, recording distinct failed/rolled-back/skipped outcomes.
-5. Retain a test record across a release and VM reboot; confirm an active drill becomes interrupted without losing accepted messages. Record the retained disk identity.
-6. Run a live backup, verify private GCS database/manifest objects and status freshness, download with a restore-operator identity, and restore to a separate disposable destination. Confirm plots, drill history and checksum/schema without replacing production data.
+Infrastructure, approved identities, versioned secrets and GitHub production variables are ready. [PR #1](https://github.com/KalacoolStudio/roleCast/pull/1) contains the implementation; merging it is the next production-changing action and will trigger the first current-main deployment.
 
-Keep task 6.5 unchecked until these live observations are recorded. No automated checks above are claimed as proof that GCP provisioning, GitHub OIDC or a live deployment has succeeded.
+1. Merge the reviewed deployment change, then record the main run URL, commit, tested image ID, published digest and `host.sh status`. Retry only at current main if necessary.
+2. Verify frontend, `/api/health`, `/api/runtime`, plot authoring and one deliberate model exercise through an authorized app-only identity. Verify this identity cannot SSH and an ungranted identity cannot tunnel. Recheck public-port rejection with the real application running.
+3. Verify required validation failure blocks deployment and incorrect OIDC claims cannot impersonate the deployment identity. Exercise overlapping updates and a failed candidate in an isolated rehearsal environment, recording distinct failed/rolled-back/skipped outcomes.
+4. Retain a test record across a release and VM reboot; confirm an active drill becomes interrupted without losing accepted messages. Record the retained disk identity. The completed bootstrap reboot checked filesystem persistence only.
+5. Run a live database backup, verify private GCS database/manifest objects and status freshness, download with a restore-operator identity, and restore to a separate disposable destination. Confirm plots, drill history and checksum/schema without replacing production data.
+
+Keep task 6.5 unchecked until these live observations are recorded. Successful bootstrap, model connectivity and automated tests are not proof that the main GitHub OIDC/deployment path or production database lifecycle has succeeded.
