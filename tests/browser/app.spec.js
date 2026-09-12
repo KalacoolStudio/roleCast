@@ -60,6 +60,190 @@ test("desktop and mobile layout; failed and interrupted histories remain readabl
     fullPage: true,
   });
 });
+async function finishSidebarDrill(page) {
+  await page
+    .locator(".plot-card")
+    .filter({ hasText: "後端工程師面試" })
+    .click();
+  await startDrill(page);
+  await expect(page.getByRole("button", { name: /用語音接通/ })).toBeVisible();
+  await page.getByRole("button", { name: "結束整場演練" }).click();
+  await expect(page.locator(".report")).toBeVisible();
+}
+
+test("sidebar toggle preserves keyboard focus, navigation, and desktop space", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: "收合側邊欄" });
+  const content = page.locator("#sidebar-content");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle).toHaveAttribute("aria-controls", "sidebar-content");
+  await finishSidebarDrill(page);
+  const selected = await page.locator(".history-item.current").textContent();
+  const url = page.url();
+  const expandedMain = await page.locator("main").boundingBox();
+  await page.screenshot({
+    path: testInfo.outputPath("sidebar-desktop-expanded.png"),
+  });
+
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  const expand = page.getByRole("button", { name: "展開側邊欄" });
+  await expect(expand).toBeFocused();
+  await expect(expand).toHaveAttribute("aria-expanded", "false");
+  await expect(content).toBeHidden();
+  await expect(page.getByRole("button", { name: /開始新演練/ })).toHaveCount(0);
+  expect(
+    await expand.evaluate((button) => getComputedStyle(button).outlineStyle),
+  ).toBe("solid");
+  expect((await page.locator("main").boundingBox()).width).toBeGreaterThan(
+    expandedMain.width,
+  );
+  await page.keyboard.press("Tab");
+  expect(
+    await page.evaluate(() =>
+      document.querySelector("main").contains(document.activeElement),
+    ),
+  ).toBe(true);
+  await page.keyboard.press("Shift+Tab");
+  await expect(expand).toBeFocused();
+  await page.screenshot({
+    path: testInfo.outputPath("sidebar-desktop-collapsed.png"),
+  });
+  await page.keyboard.press("Space");
+  await expect(toggle).toBeFocused();
+  await expect(content).toBeVisible();
+  await expect(page.locator(".history-item.current")).toHaveText(selected);
+  expect(page.url()).toBe(url);
+
+  await page.setViewportSize({ width: 1440, height: 450 });
+  const history = page.locator(".history");
+  expect(
+    await history.evaluate(
+      (element) => element.scrollHeight > element.clientHeight,
+    ),
+  ).toBe(true);
+  await history.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  expect(
+    await history.evaluate((element) => element.scrollTop),
+  ).toBeGreaterThan(0);
+  await expect(page.locator(".sidebar-foot")).toBeInViewport();
+  await toggle.click();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".history-item.current")).toHaveText(selected);
+});
+
+test("sidebar toggling preserves drafts and stays collapsed during in-page navigation", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const collapse = page.getByRole("button", { name: "收合側邊欄" });
+  const expand = page.getByRole("button", { name: "展開側邊欄" });
+  const interview = page
+    .locator(".plot-card")
+    .filter({ hasText: "後端工程師面試" });
+  await interview.click();
+  await page.getByLabel("讓練習更貼近你").fill("保留這段尚未送出的背景。");
+  await collapse.click();
+  await expand.click();
+  await expect(interview).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("讓練習更貼近你")).toHaveValue(
+    "保留這段尚未送出的背景。",
+  );
+
+  await page.getByRole("button", { name: "劇本工作室", exact: true }).click();
+  await page.getByRole("button", { name: "＋ 新增劇本" }).click();
+  await page.getByLabel("劇本名稱", { exact: true }).fill("尚未儲存的劇本");
+  await page.getByLabel("Reporter prompt").fill("保留這段未儲存的回饋指引。");
+  await collapse.click();
+  await expand.click();
+  await expect(page.getByLabel("劇本名稱", { exact: true })).toHaveValue(
+    "尚未儲存的劇本",
+  );
+  await expect(page.getByLabel("Reporter prompt")).toHaveValue(
+    "保留這段未儲存的回饋指引。",
+  );
+  await expect(page.locator(".nav-item.selected")).toHaveText("劇本工作室");
+
+  await page.getByRole("button", { name: /開始新演練/ }).click();
+  await page.locator(".plot-card").filter({ hasText: "防詐警覺演練" }).click();
+  await collapse.click();
+  await page.getByRole("button", { name: /開始演練/ }).click();
+  await expect(page.locator(".marketplace-intro")).toBeVisible();
+  await expect(expand).toHaveAttribute("aria-expanded", "false");
+  await expand.click();
+  await expect(page.locator(".nav-item.selected")).toContainText("開始新演練");
+});
+
+test("sidebar mobile history and responsive layouts survive collapse and resize", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await finishSidebarDrill(page);
+  await page.getByRole("button", { name: /開始新演練/ }).click();
+  const collapse = page.getByRole("button", { name: "收合側邊欄" });
+  const expand = page.getByRole("button", { name: "展開側邊欄" });
+  await page.getByRole("button", { name: "演練紀錄 ＋" }).click();
+  await expect(page.locator(".history-item").first()).toBeVisible();
+  const expandedHeight = (await page.locator(".sidebar").boundingBox()).height;
+  await page.screenshot({
+    path: testInfo.outputPath("sidebar-mobile-expanded.png"),
+  });
+  await collapse.click();
+  await expect(page.locator(".brand")).toBeVisible();
+  await expect(page.locator(".history-item").first()).toBeHidden();
+  expect((await page.locator(".sidebar").boundingBox()).height).toBeLessThan(
+    expandedHeight,
+  );
+  await page.screenshot({
+    path: testInfo.outputPath("sidebar-mobile-collapsed.png"),
+  });
+
+  for (const width of [320, 390, 700, 701, 768, 1000, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(expand).toBeInViewport();
+    await expect(expand).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#sidebar-content")).toBeHidden();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `collapsed at ${width}px`,
+    ).toBe(true);
+    const bounds = await expand.boundingBox();
+    expect(bounds.width).toBeGreaterThanOrEqual(44);
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await expand.click();
+    await expect(collapse).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `expanded at ${width}px`,
+    ).toBe(true);
+    await collapse.click();
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expand.click();
+  await expect(
+    page.getByRole("button", { name: "演練紀錄 −" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await page.locator(".history-item").filter({ hasText: "演練完成" }).click();
+  await expect(page.locator(".report")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "演練紀錄 ＋" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".history-item").first()).toBeHidden();
+});
+
 test("scenario selection, keyboard interaction, refresh, StopCall and report evidence", async ({
   page,
 }) => {

@@ -159,6 +159,68 @@ test("voice-only calls save speech automatically and keep text controls absent",
   await released(page);
   await expect(page.locator(".call")).toHaveCount(1);
 });
+test("sidebar toggling preserves an active voice call and its captions", async ({
+  page,
+}) => {
+  await start(page);
+  await page.getByRole("button", { name: "用語音接通" }).click();
+  await expect(page.getByText("語音已連線，直接說話即可")).toBeVisible();
+  await expect(page.locator(".voice-message.user > p")).toHaveText(
+    "我想先瞭解情況。",
+  );
+  const before = await currentDrill(page);
+  const connections = await stats(page.request);
+  const permissions = await page.evaluate(() => window.voiceTest.permissions);
+
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const label of ["收合側邊欄", "展開側邊欄"]) {
+      await page.getByRole("button", { name: label }).click();
+      const media = await page.evaluate(() => ({
+        captures: window.voiceTest.captures,
+        outputs: window.voiceTest.outputs,
+      }));
+      await control(page.request, { action: "play" });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            ({ captures, outputs }) =>
+              window.voiceTest.captures > captures &&
+              window.voiceTest.outputs > outputs,
+            media,
+          ),
+        )
+        .toBe(true);
+      await expect(page.locator(".voice-message.persona > p")).toHaveText(
+        "你好，請直接用語音和我聊聊。",
+      );
+      await expect(page.locator(".voice-message.user > p")).toHaveText(
+        "我想先瞭解情況。",
+      );
+      const after = await currentDrill(page);
+      expect(after.id).toBe(before.id);
+      expect(after.currentCallId).toBe(before.currentCallId);
+      expect(after.state).toBe("in_call");
+      const current = await stats(page.request);
+      expect(current.attempts).toBe(connections.attempts);
+      expect(current.connections.at(-1)).toMatchObject({
+        disconnected: false,
+        greetings: connections.connections.at(-1).greetings,
+      });
+      expect(await page.evaluate(() => window.voiceTest.permissions)).toBe(
+        permissions,
+      );
+      expect(
+        await page.evaluate(() =>
+          window.voiceTest.tracks.every((track) => track.readyState === "live"),
+        ),
+      ).toBe(true);
+    }
+  }
+  await page.getByRole("button", { name: "掛斷本通" }).click();
+  await released(page);
+});
+
 test("ATM drawer updates the drill balance and sends transfer and withdrawal evidence", async ({
   page,
 }, testInfo) => {

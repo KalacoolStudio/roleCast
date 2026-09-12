@@ -77,6 +77,7 @@ function App() {
   const [managing, setManaging] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deploymentMode, setDeploymentMode] = useState(null);
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const voice = useVoice(id, drill, voiceApi);
@@ -220,80 +221,115 @@ function App() {
   const messages = drill?.calls.flatMap((c) => c.messages) || [];
   return (
     <div className="shell">
-      <aside className={`sidebar ${showHistory ? "history-open" : ""}`}>
-        <a
-          className="brand"
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
-            select("");
-          }}
-        >
-          <CastMark />
-          <span>
-            RoleCast<small>劇本大廳</small>
-          </span>
-        </a>
-        <button
-          className={`nav-item ${!id && !managing ? "selected" : ""}`}
-          onClick={() => select("")}
-        >
-          <span>＋</span> 開始新演練
-        </button>
-        <button
-          className={`nav-item ${managing ? "selected" : ""}`}
-          onClick={() => {
-            voice.stop();
-            setShowIntro(false);
-            setManaging(true);
-          }}
-        >
-          劇本工作室
-        </button>
-        {activeId && (
-          <button className="nav-item" onClick={() => select(activeId)}>
-            <span className="live-dot" /> 繼續目前演練
+      <aside
+        className={`sidebar ${showHistory ? "history-open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`}
+      >
+        <div className="sidebar-header">
+          <a
+            className="brand"
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              select("");
+            }}
+          >
+            <CastMark />
+            <span>
+              RoleCast<small>劇本大廳</small>
+            </span>
+          </a>
+          <button
+            type="button"
+            className="sidebar-toggle"
+            aria-label={sidebarCollapsed ? "展開側邊欄" : "收合側邊欄"}
+            title={sidebarCollapsed ? "展開側邊欄" : "收合側邊欄"}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="sidebar-content"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <path d="M9 4v16" />
+              <path d={sidebarCollapsed ? "m13 9 3 3-3 3" : "m16 9-3 3 3 3"} />
+            </svg>
           </button>
-        )}
-        <button
-          className="mobile-history"
-          aria-expanded={showHistory}
-          onClick={() => setShowHistory(!showHistory)}
+        </div>
+        <div
+          id="sidebar-content"
+          className="sidebar-content"
+          hidden={sidebarCollapsed}
         >
-          演練紀錄 {showHistory ? "−" : "＋"}
-        </button>
-        <div className="section-label">
-          演練紀錄 <span>{drills.length.toString().padStart(2, "0")}</span>
-        </div>
-        <div className="history">
-          {drills.length ? (
-            drills.map((s) => (
-              <button
-                key={s.id}
-                className={`history-item ${s.id === id ? "current" : ""}`}
-                onClick={() => select(s.id)}
-              >
-                <strong>{s.plot.name}</strong>
-                <span>{date(s.createdAt)}</span>
-                <small>{labels[s.state]}</small>
-              </button>
-            ))
-          ) : (
-            <p className="empty-history">
-              每一次練習，
-              <br />
-              都會留下一點進步。
-            </p>
+          <button
+            className={`nav-item ${!id && !managing ? "selected" : ""}`}
+            onClick={() => select("")}
+          >
+            <span>＋</span> 開始新演練
+          </button>
+          <button
+            className={`nav-item ${managing ? "selected" : ""}`}
+            onClick={() => {
+              voice.stop();
+              setShowIntro(false);
+              setManaging(true);
+            }}
+          >
+            劇本工作室
+          </button>
+          {activeId && (
+            <button className="nav-item" onClick={() => select(activeId)}>
+              <span className="live-dot" /> 繼續目前演練
+            </button>
           )}
-        </div>
-        <div className="sidebar-foot">
-          <span className="live-dot" />
-          {deploymentMode === "gcp"
-            ? "雲端私人工作區"
-            : deploymentMode === "local"
-              ? "本機工作空間"
-              : "正在連線…"}
-          <small>對話演練 · 0.1</small>
+          <button
+            className="mobile-history"
+            aria-expanded={showHistory}
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            演練紀錄 {showHistory ? "−" : "＋"}
+          </button>
+          <div className="section-label">
+            演練紀錄 <span>{drills.length.toString().padStart(2, "0")}</span>
+          </div>
+          <div className="history">
+            {drills.length ? (
+              drills.map((s) => (
+                <button
+                  key={s.id}
+                  className={`history-item ${s.id === id ? "current" : ""}`}
+                  onClick={() => select(s.id)}
+                >
+                  <strong>{s.plot.name}</strong>
+                  <span>{date(s.createdAt)}</span>
+                  <small>{labels[s.state]}</small>
+                </button>
+              ))
+            ) : (
+              <p className="empty-history">
+                每一次練習，
+                <br />
+                都會留下一點進步。
+              </p>
+            )}
+          </div>
+          <div className="sidebar-foot">
+            <span className="live-dot" />
+            {deploymentMode === "gcp"
+              ? "雲端私人工作區"
+              : deploymentMode === "local"
+                ? "本機工作空間"
+                : "正在連線…"}
+            <small>對話演練 · 0.1</small>
+          </div>
         </div>
       </aside>
       <main>
